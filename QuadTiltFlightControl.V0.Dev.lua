@@ -1,48 +1,70 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
--- V 0.6.13 Michael McHenry 2019-06-07
+-- V 0.6.14 Michael McHenry 2019-06-07
 -- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
-sourceV0613="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
+sourceV0614="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
 
-local i, o, s, m = input, output, screen, math
-local inN, outN, input_GetBool, dtb =
-  i.getNumber, 
-  o.setNumber, 
-  i.getBool,
-  s.drawTextBox
+--local strings = "test,test2,test3"
+--for i in string.gmatch(strings, "([^,]*),") do
+--   print(i)
+--end
+
+local _i, _o, _s, _m = input, output, screen, math
+local inN, outN, input_GetBool, dtb, tableUnpack =
+  _i.getNumber, 
+  _o.setNumber, 
+  _i.getBool,
+  _s.drawTextBox,
+  table.unpack
 
 local abs, sin, cos, mathmax, pi, pi2 =
-  m.abs, m.sin, m.cos, m.max,
-  m.pi
+  _m.abs, _m.sin, _m.cos, _m.max,
+  _m.pi
 pi2 = pi * 2
 
-local function clamp(v,minVal,maxVal) 
+--function names to minify
+local clamp, getN, negativeOneIf, ifVal,
+shiftBuffer, sign, newRotor, trunc2, trunc, getTokens
+
+function clamp(v,minVal,maxVal) 
 	if v==nil then return nil end
 	if v>maxVal then return maxVal end 
 	if v<minVal then return minVal end 
 	return v
 end
 
-local function getN(...)
+function getN(...)
     local r={}
     for i,v in ipairs({...}) do r[i]=inN(v) end
-    return table.unpack(r)
+    return tableUnpack(r)
 end
 
-local function negativeOneIf(condition)
+function negativeOneIf(condition)
 	if condition then return -1 end
 	return 1
 end
-local function ifVal(condition, ifTrue, ifFalse)
+function ifVal(condition, ifTrue, ifFalse)
   if condition then return ifTrue end
   return ifFalse
 end
 
+local state_boot, state_waitRPS, state_hover, _tokenId 
+  = 1,2,3, 0
+function getTokens(n, list)
+  list = {}
+  for i=1,n do
+    _tokenId = _tokenId + 1
+    list[i] = "token_".._tokenId
+  end
+  return tableUnpack(list)
+end
+
 local altBuff, velBuff, accBuff, tgVelBuff, tgAccBuff
 , _pitch, _accErr
- = "altBuff", "velBuff", "accBuff", "tgVelBuff", "tgAccBuff"
- , "pitch", "accErr"
+ = getTokens(7)
+ --"altBuff", "velBuff", "accBuff", "tgVelBuff", "tgAccBuff"
+ --, "pitch", "accErr"
 
-local function newRotor()
+function newRotor()
 	local rotor = {
 		ofs=nil,
 		alt=0,
@@ -61,7 +83,7 @@ local function newRotor()
 	return rotor
 end
 
-local state_boot, state_waitRPS, state_hover = 1,2,3
+
 local luaTick, lastTick, state, forwardPitch, qr, 
   altTg, bufferWidth, bufferHead, bufferDeltaPerSecond =
   0, -- luaTick=
@@ -82,14 +104,14 @@ for i,v in pairs(bufferList) do
   buffers[v]={}
 end
 
-local function shiftBuffer(buffer)
+function shiftBuffer(buffer)
     for bufferIndex=1, bufferWidth do
       -- Shift values forward in buffer or initialize to zero if nil
       buffer[bufferIndex] = buffer[bufferIndex+1] or 0
     end
 end
 
-local function sign(x)
+function sign(x)
   return x>0 and 1 or x<0 and -1 or 0
 end
 
@@ -141,7 +163,7 @@ function onTick()
       -- Shift values forward in buffer or initialize to zero if nil
       shiftBuffer(rotor[buffer])
 		end
-		rotor.acc = rotor.vel - rotor.velBuff[1]
+		rotor.acc = rotor.vel - rotor[velBuff][1]
 		rotor.velErr = rotor.vel - rotor[tgVelBuff][1]
 		rotor[_accErr] = rotor.acc - rotor[tgAccBuff][1]
 		
@@ -274,29 +296,29 @@ function onTick()
 
 			-- Add in pitch control/correction contribution to target velocity
 			rotorAxisPolarity = negativeOneIf(i < 3) -- Front rotors are negative
-      pTiltCorrection = 36 --ifVal(abs(pitch)<0.5,12,0)
+      pTiltCorrection = 60 --ifVal(abs(pitch)<0.5,12,0)
       pitchLevelTarget = sPitch + axis5
       
       tgVelRollPitch = clamp(
-			  (pitch * 6 + pitchLevelTarget * pTiltCorrection) * rotorAxisPolarity
+			  (pitch * 10 + pitchLevelTarget * pTiltCorrection) * rotorAxisPolarity
 				- rotor.vel * 0.5 -- How far we'll have be half a second from now. Should cut down on oversteer
-			  , -1, 12)
+			  , -4, 12)
       tgAccRollPitch = clamp(tgVelRollPitch - rotor.vel
-        , -2, 2)
+        , -6, 6)
       tgVelRollPitch = rotor.vel + tgAccRollPitch
 			
 			-- Add in roll control/correction contribution to target velocity
 			rotorAxisPolarity = negativeOneIf(i==2 or i==4) -- Right rotors are negative
-      local rTiltCorrection = 36 --ifVal(abs(roll)<0.5,8,0)
+      local rTiltCorrection = 60 --ifVal(abs(roll)<0.5,8,0)
 			
       tgVelRollPitch = clamp(
-			  (roll * 6 - sRoll*rTiltCorrection) * rotorAxisPolarity -- sRoll points left, so positive values need negative correction
+			  (roll * 10 - sRoll*rTiltCorrection) * rotorAxisPolarity -- sRoll points left, so positive values need negative correction
 				- rotor.vel * 0.5 -- How far we'll have be half a second from now. Should cut down on oversteer
-			  , -1, 8)
+			  , -4, 12)
         + tgVelRollPitch -- existing contribution from pitch
 
       tgAccRollPitch = clamp(tgVelRollPitch - rotor.vel
-        , -2, 2)
+        , -6, 6)
       tgVelRollPitch = rotor.vel + tgAccRollPitch
 
 			-- Target velocity - attempt to close tgClimb in one second + 
@@ -307,9 +329,15 @@ function onTick()
 				--* bufferDeltaPerSecond -- We will attempt to reach the target velocity in 1/12 of a second (assuming bufferWidth=5)
 				, -10, 10)
 			
-      newPitch = rotor.pC * climbThrustAdjust 
+      newPitch = clamp( rotor.pC * climbThrustAdjust 
 				+ (rotor.pC * 0.1 * rotor.tgAcc)
-        + (forwardPitch * axis6)
+        + (forwardPitch * axis6), -1, 1)
+      if forwardPitch>0.5 then
+        yp = yaw * negativeOneIf(i==2 or i==4)
+        newPitch = newPitch + yp
+      end
+
+
 			pitchChange = clamp(newPitch - rotor[_pitch], -0.05, 0.05) 
 			rotor[_pitch] = rotor[_pitch] + pitchChange
 
@@ -349,20 +377,20 @@ function onTick()
   outN(12, outRoll)
 end
 
-local function trunc(n) if n==nill then return "nil" end return string.format("%.f", n) end
-local function trunc2(n) if n==nill then return "nil" end return string.format("%.2f", n) end
+function trunc(n) if n==nill then return "nil" end return string.format("%.f", n) end
+function trunc2(n) if n==nill then return "nil" end return string.format("%.2f", n) end
 
 
 
 function onDraw()
 	if mcTick==nil then return false end -- safety
 	
-	w = screen.getWidth()
-	h = screen.getHeight()					
+	w = _s.getWidth()
+	h = _s.getHeight()					
 	
    
   
-	screen.setColor(255, 0, 0)
+	_s.setColor(255, 0, 0)
 	tw=5*10
 	--tx=w-tw*2-5
 	tx=20
