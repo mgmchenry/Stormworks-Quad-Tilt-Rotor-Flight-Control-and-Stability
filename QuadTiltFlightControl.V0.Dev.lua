@@ -1,7 +1,7 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
--- V 0.6.14 Michael McHenry 2019-06-07
+-- V 0.7.15 Michael McHenry 2019-08-03
 -- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
-sourceV0614="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
+sourceV0715="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
 
 --local strings = "test,test2,test3"
 --for i in string.gmatch(strings, "([^,]*),") do
@@ -210,11 +210,14 @@ function onTick()
 
 	-- control input
 	dAltTG = (coll*10)^2 * ifVal(coll<0,-1,1)
+	--altTg=altTg+(dAltTG/60)
+  if abs(coll) > 0.05 then
+    altTg = qrAlt
+  end
 	
   --dRotorTilt = (yaw*10)^2 * ifVal(yaw<0,-1,1)
 	--forwardPitch=forwardPitch+(dRotorTilt/60)
   forwardPitch = clamp(forwardPitch + throttleUp / (60 * 3), 0, 1)
-	altTg=altTg+(dAltTG/60)
 
   --if abs(coll) > 0.1 then
   --  altTg = qrAlt
@@ -281,13 +284,17 @@ function onTick()
         ) * climbThrustAdjust -- Adjust for tilt of 
         , -maxAltHoldVelocity, maxAltHoldVelocity)
 
+      if abs(coll) > 0.05 then
+        tgVelClimb = coll * 40
+      end
+
     	-- rotor.pC is the approximate pitch needed for a hover
 			-- In a hover, this means accelerating about 9.8m/s per second ish to hold altitude against gravity
       -- max pC is 0.6, leaving room for roll/pitch control
       -- hopefully, this leaves 2m/s for altHold and 2m/s for roll/pitch
       -- clamp acceleration requested to 2
       tgAccClimb = clamp(tgVelClimb - rotor.vel
-        , -2, 2)
+        , -10, 10)
       tgVelClimb = rotor.vel + tgAccClimb
 
 			-- Target velocity - attempt to close tgClimb in one second
@@ -296,7 +303,7 @@ function onTick()
 
 			-- Add in pitch control/correction contribution to target velocity
 			rotorAxisPolarity = negativeOneIf(i < 3) -- Front rotors are negative
-      pTiltCorrection = 60 --ifVal(abs(pitch)<0.5,12,0)
+      pTiltCorrection = 40 --ifVal(abs(pitch)<0.5,12,0)
       pitchLevelTarget = sPitch + axis5
       
       tgVelRollPitch = clamp(
@@ -304,12 +311,12 @@ function onTick()
 				- rotor.vel * 0.5 -- How far we'll have be half a second from now. Should cut down on oversteer
 			  , -4, 12)
       tgAccRollPitch = clamp(tgVelRollPitch - rotor.vel
-        , -6, 6)
+        , -10, 10)
       tgVelRollPitch = rotor.vel + tgAccRollPitch
 			
 			-- Add in roll control/correction contribution to target velocity
 			rotorAxisPolarity = negativeOneIf(i==2 or i==4) -- Right rotors are negative
-      local rTiltCorrection = 60 --ifVal(abs(roll)<0.5,8,0)
+      local rTiltCorrection = 40 --ifVal(abs(roll)<0.5,8,0)
 			
       tgVelRollPitch = clamp(
 			  (roll * 10 - sRoll*rTiltCorrection) * rotorAxisPolarity -- sRoll points left, so positive values need negative correction
@@ -318,7 +325,7 @@ function onTick()
         + tgVelRollPitch -- existing contribution from pitch
 
       tgAccRollPitch = clamp(tgVelRollPitch - rotor.vel
-        , -6, 6)
+        , -10, 10)
       tgVelRollPitch = rotor.vel + tgAccRollPitch
 
 			-- Target velocity - attempt to close tgClimb in one second + 
@@ -327,7 +334,7 @@ function onTick()
 			  
 			rotor.tgAcc = clamp((rotor.tv - rotor.vel)
 				--* bufferDeltaPerSecond -- We will attempt to reach the target velocity in 1/12 of a second (assuming bufferWidth=5)
-				, -10, 10)
+				, -40, 40)
 			
       newPitch = clamp( rotor.pC * climbThrustAdjust 
 				+ (rotor.pC * 0.1 * rotor.tgAcc)
@@ -422,19 +429,19 @@ function onDraw()
 	--pVal("sRoll",trunc2(sRoll))
 	
 	for i,r in pairs(qr) do
-		pVal(trunc(i).."pColl",trunc2(r.pC))
-		pVal(trunc(i).."Confdnc",trunc2(r.conf))
+		--pVal(trunc(i).."pColl",trunc2(r.pC))
+		--pVal(trunc(i).."Confdnc",trunc2(r.conf))
 		--pVal("Rotor",trunc(i))
 		--pVal("Alt"..trunc(i),trunc2(r.alt))
 		--pVal("Ofs",trunc2(r.ofs))
 		--pVal("Tilt",trunc2(r.tilt))
-		pVal("Vel",trunc2(r.vel))
-		pVal("Vel2",trunc2(r.v2))
+		--pVal("Vel",trunc2(r.vel))
+		--pVal("Vel2",trunc2(r.v2))
 		--pVal("TG",trunc2(r.tg))
 		--pVal("TVel",trunc2(r.tv))
 		--pVal("TAcc",trunc2(r.tgAcc))
-		pVal("vErr",trunc2(r.velErr))
-		pVal("aErr",trunc2(r[_accErr]))
+		--pVal("vErr",trunc2(r.velErr))
+		--pVal("aErr",trunc2(r[_accErr]))
 
 		--pVal(trunc(i).."Pitch",trunc2(r[_pitch]))
 	end
