@@ -1,10 +1,7 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
--- V 0.8.16 Michael McHenry 2019-08-09
--- except... then I edited it a bunch without saving a new version
--- so this isn't the code for 0.8.16 at all any more :(
--- the actual 0.8.16 code is most likely lost forever
+-- V 0.9.19 Michael McHenry 2020-09-22
 -- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
-sourceV0816="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
+sourceV0919="https://repl.it/@mgmchenry/Stormworks"
 
 --local strings = "test,test2,test3"
 --for i in string.gmatch(strings, "([^,]*),") do
@@ -19,31 +16,59 @@ local inN, outN, input_GetBool, dtb, tableUnpack =
   _s.drawTextBox,
   table.unpack
 
-local abs, sin, cos, mathmax, pi, pi2 =
+local abs, sin, cos, mathmax, pi
+   --, pi2 
+ =
   _m.abs, _m.sin, _m.cos, _m.max,
   _m.pi
-pi2 = pi * 2
+  --, _m.pi * 2
 
 --function names to minify
 local clamp, getN, negativeOneIf, ifVal,
 shiftBuffer, sign, newRotor, trunc2, trunc, getTokens,
 isValidNumber, numberOrZero
 
-function clamp(v,minVal,maxVal) 
-	if v==nil then return nil end
-	if v>maxVal then return maxVal end 
-	if v<minVal then return minVal end 
-	return v
-end
 
-function numberOrZero(x)
-  return x~=nil and type(x)=='number' and x or 0
+function ifVal(condition, ifTrue, ifFalse)
+  --[[
+  if condition then return ifTrue end
+  return ifFalse
+  --]]
+  return condition and ifTrue or ifFalse
+end
+function negativeOneIf(condition)
+	--[[
+  if condition then return -1 end
+	return 1
+  --]]
+  return condition and -1 or 1
 end
 
 function isValidNumber(x,invalidValue)
   -- this evaluated correctly
   -- local x,y = 1,nil; print(x~=nil and type(x)=='number' and (y==nil or x~=y))
-  return x~=nil and type(x)=='number' and (invalidValue==nil or x~=invalidValue))
+  --return x~=nil and type(x)=='number' and (invalidValue==nil or x~=invalidValue)
+  -- this should work just as well and is a tad shorter:
+  return x~=nil and type(x)=='number' and x~=invalidValue
+end
+
+function clamp(v,minVal,maxVal) 
+  --[[
+	if v==nil then return nil end
+	if v>maxVal then return maxVal end 
+	if v<minVal then return minVal end 
+	return v
+  --]]
+  return isValidNumber(v) and
+    (v>maxVal and maxVal or
+      (v<minVal and minVal) or
+      v
+    )
+    or nil
+end
+
+function numberOrZero(x)
+  return x~=nil and type(x)=='number' and x or 0
 end
 
 function getN(...)
@@ -52,14 +77,6 @@ function getN(...)
     return tableUnpack(r)
 end
 
-function negativeOneIf(condition)
-	if condition then return -1 end
-	return 1
-end
-function ifVal(condition, ifTrue, ifFalse)
-  if condition then return ifTrue end
-  return ifFalse
-end
 
 local _tokenId, state_boot, state_initOffset, state_waitRPS, state_hover 
   = 0,1,2,3,4
@@ -79,22 +96,22 @@ local altBuff, velBuff, accBuff, tgVelBuff, tgAccBuff
  --, "pitch", "accErr"
 
 function newRotor()
-	local rotor = {
-		ofs=nil,
-		alt=0,
-		tilt=0,
-		vel=0,
-		rot=0,
-		pC=nil,pP=0,pR=0
-	}
+  local rotor = {
+    ofs=nil,
+    alt=0,
+    tilt=0,
+    vel=0,
+    rot=0,
+    pC=nil,pP=0,pR=0
+  }
   rotor[_accErr] = nil
   rotor[_pitch] = 0.25
-	rotor[altBuff] = {}
-	rotor[velBuff] = {}
-	rotor[accBuff] = {}
-	rotor[tgVelBuff] = {}
-	rotor[tgAccBuff] = {}
-	return rotor
+  rotor[altBuff] = {}
+  rotor[velBuff] = {}
+  rotor[accBuff] = {}
+  rotor[tgVelBuff] = {}
+  rotor[tgAccBuff] = {}
+  return rotor
 end
 
 
@@ -129,7 +146,7 @@ function sign(x)
   return x>0 and 1 or x<0 and -1 or 0
 end
 
-local roll,pitch,yaw,coll,axis5,axis6,
+local pilotInputRoll,pitch,yaw,coll,axis5,axis6,
 	sX,sY,sCompass,sPitch,sRoll,sTiltUp,
 	rRPS,mcTick, yawRate, rollRate, pitchRate,
   qrAlt, throttleUp, rotorInputCount
@@ -143,7 +160,7 @@ function onTick()
 	end
   --]]
 
-	roll,pitch,yaw,coll,axis5,axis6,
+	pilotInputRoll,pitch,yaw,coll,axis5,axis6,
 	sX,sY,sCompass,sPitch,sRoll,sTiltUp,
 	rRPS,mcTick=getN(1,2,3,4,5,6,21,22,23,24,25,26,29,30)
 	qrAlt,rotorInputCount=0,0
@@ -154,6 +171,10 @@ function onTick()
   if sTiltUp<0 then
     sPitch = sPitch + (0.25 * sign(sTiltUp))
   end
+  -- corrected roll =
+  -- asin((sin(x*pi/180))/(sin((90-y)*pi/180)))*180/pi
+  -- x is the roll angle from the sensor in degrees, and y is the pitch angle from the sensor in degrees
+  -- according to jbaker from Stormworks lua discord
 
   for i,v in pairs(bufferList) do
     shiftBuffer(buffers[v])
@@ -173,7 +194,7 @@ function onTick()
 		local inputOffset=(i-1)*3 + 9
 		rotor.alt, rotor.tilt, rotor.vel =
 		  getN(inputOffset, inputOffset+1, inputOffset+2)
-		rotor.hasData = false
+		--rotor.hasData = false
 
 		for bufI,buffer in pairs({altBuff,velBuff,accBuff,tgVelBuff,tgAccBuff}) do
       -- Shift values forward in buffer or initialize to zero if nil
@@ -181,11 +202,12 @@ function onTick()
 		end
 
 		if isValidNumber(rotor.alt,0) and isValidNumber(rotor.tilt) and isValidNumber(rotor.vel) then
-			rotor.hasData = true
+			--rotor.hasData = true
       rotorInputCount = rotorInputCount + 1
-      rotor.altRaw = rotor.alt
-      rotor.alt = rotor.alt - numberOrZero(rotor.ofs)
-      
+      --adjusting the alt by the offset here is not the right thing to do
+      -- that only applies to setting the target alt
+      --rotor.altRaw = rotor.alt
+      --rotor.alt = rotor.alt - numberOrZero(rotor.ofs)     
       qrAlt = qrAlt + rotor.alt
       rotor.v2 = (rotor.alt - rotor[altBuff][1]) * bufferDeltaPerSecond
       
@@ -204,58 +226,58 @@ function onTick()
     -- after pilot input processing
 	end
 	
-  --[[ Don't really need this unless we have 4 valid rotors
-  if rotorInputCount > 0 then
-	  qrAlt=qrAlt/rotorInputCount
-  end
-  --]]
-
 	local defPitch, dAltTG, dRotorTilt, outPitch, outRoll
-	defPitch=0
+	--defPitch=0
 	if state==state_boot then
-		defPitch=0.25
+		--defPitch=0.25
 		state=state_initOffset
 	end
 
+  -- default pitch will be based on raw pilot input
+  defPitch = coll
   -- Abort control code if we're not getting sensor input?
   if rotorInputCount~=4 then 
-    return false
+    --return false
   -- Long term, a manual override seems safer
+    --defPitch = coll
   else
     -- OK, we have 4 valid rotor input sets
 	  qrAlt=qrAlt/rotorInputCount
+    
+    if state==state_initOffset then
+      state=state_waitRPS
+			for i,r in pairs(qr) do
+				r.ofs=r.alt-qrAlt
+			end
+      -- would be better if we check pitch and roll first
+      -- and also sanity check the offests against tilt later
+      -- in case the MC is initialized with the quad rotor 
+      -- at an angle
+    end
+    
     if altTg==nil then -- and rotorInputCount==4
       altTg=qrAlt
     end
-    
-		if rotor.ofs==nil and rotor.alt~=0 then
-			-- should also be checking for sPitch and sRoll==0 here
-			rotor.ofs = rotor.alt
-		end
+
+    if state==state_waitRPS then
+      if rRPS>25 then 
+        state=state_hover
+        altTg=qrAlt+0.25
+        for i,r in pairs(qr) do
+          r.tg=r.ofs+altTg
+          -- I now don't remember what these abbreviations mean:
+          r.pC=0.25
+          r.conf=0
+          r.tv=0
+        end
+      end
+    end
 
   end
 
 
 
 
-	if state==state_initOffset then
-		defPitch=0.25
-		state=state_waitRPS
-	end
-	if state==state_waitRPS then
-		defPitch=0.10
-		if rRPS>25 then 
-      state=state_hover
-			altTg=qrAlt+1
-			for i,r in pairs(qr) do
-				r.ofs=r.alt-qrAlt
-				r.tg=r.ofs+altTg
-				r.pC=0.25
-				r.conf=0
-				r.tv=0
-			end
-    end
-	end
 
 	-- control input
 	dAltTG = (coll*10)^2 * ifVal(coll<0,-1,1)
@@ -273,13 +295,17 @@ function onTick()
   --end
 
   outPitch = pitch + (sPitch + axis5) * 2
-  outRoll = roll + (sRoll) * -2
+  outRoll = pilotInputRoll + (sRoll) * -2
 			
 	for i,rotor in pairs(qr) do
 
-    local yawTwist = clamp( (yaw + yawRate*4) * 0.25, -.25, .25)
+    local yawTwist, tiltYawTaper 
+      = clamp( (yaw + yawRate*4) * 0.25, -.25, .25)
+      -- tilt for yaw should taper off between .25 and .5 forwardPitch
+      -- tiltYawTaper =
+      , clamp(2 - forwardPitch * 4,0,1)
     if i==2 or i==4 then yawTwist = -yawTwist end
-		rotor.rot = forwardPitch + yawTwist
+		rotor.rot = forwardPitch + (yawTwist * tiltYawTaper)
 				
 		if state~=state_hover then
 		  rotor[_pitch] = defPitch
@@ -289,7 +315,7 @@ function onTick()
       tgVelClimb, tgAccClimb, tgVelRollPitch, tgAccRollPitch, maxAltHoldVelocity,
       climbRate, climbVel, rotorAxisPolarity, pTiltCorrection, pitchLevelTarget, newPitch, pitchChange
 
-			rotorAngle = rotor.tilt * pi2
+			rotorAngle = rotor.tilt * pi * 2
 			tiltThrustX = cos(rotorAngle)
 			tiltThrustY = sin(rotorAngle)
 			tiltThrustPctY = tiltThrustY / (tiltThrustX + abs(tiltThrustY))
@@ -365,10 +391,10 @@ function onTick()
 			
 			-- Add in roll control/correction contribution to target velocity
 			rotorAxisPolarity = negativeOneIf(i==2 or i==4) -- Right rotors are negative
-      local rTiltCorrection = 40 --ifVal(abs(roll)<0.5,8,0)
+      local rTiltCorrection = 40 --ifVal(abs(pilotInputRoll)<0.5,8,0)
 			
       tgVelRollPitch = clamp(
-			  (roll * 10 - sRoll*rTiltCorrection) * rotorAxisPolarity -- sRoll points left, so positive values need negative correction
+			  (pilotInputRoll * 10 - sRoll*rTiltCorrection) * rotorAxisPolarity -- sRoll points left, so positive values need negative correction
 				- rotor.vel * 0.5 -- How far we'll have be half a second from now. Should cut down on oversteer
 			  , -4, 12)
         + tgVelRollPitch -- existing contribution from pitch
@@ -394,7 +420,7 @@ function onTick()
       end
 
 
-			pitchChange = clamp(newPitch - rotor[_pitch], -0.05, 0.05) 
+			pitchChange = clamp(newPitch - rotor[_pitch], -0.2, 0.2) 
 			rotor[_pitch] = rotor[_pitch] + pitchChange
 
 			rotor[tgVelBuff][bufferHead] = rotor.tv
@@ -433,10 +459,12 @@ function onTick()
   outN(12, outRoll)
 end
 
-function trunc(n) if n==nill then return "nil" end return string.format("%.f", n) end
-function trunc2(n) if n==nill then return "nil" end return string.format("%.2f", n) end
-
-
+--[[
+function trunc(n) if n==nil then return "nil" end return string.format("%.f", n) end
+function trunc2(n) if n==nil then return "nil" end return string.format("%.2f", n) end
+--]]
+function trunc(n) return n==nil and "nil" or string.format("%.f", n) end
+function trunc2(n) return n==nil and "nil" or string.format("%.2f", n) end
 
 function onDraw()
 	if mcTick==nil then return false end -- safety
@@ -464,7 +492,7 @@ function onDraw()
 	tDiff=luaTick-mcTick
 	pVal("State",state)
 	pVal("TickDiff",trunc2(tDiff))
-	--pVal("Roll",trunc2(roll))
+	--pVal("Roll",trunc2(pilotInputRoll))
 	--pVal("Pitch",trunc2(pitch))
 	--pVal("Yaw",trunc2(yaw))
 	--pVal("Coll",trunc2(coll))
@@ -495,4 +523,4 @@ function onDraw()
 		--pVal(trunc(i).."Pitch",trunc2(r[_pitch]))
 	end
 	
-end
+end 
