@@ -1,7 +1,10 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
--- V 0.7.15 Michael McHenry 2019-08-03
+-- V 0.8.16 Michael McHenry 2019-08-09
+-- except... then I edited it a bunch without saving a new version
+-- so this isn't the code for 0.8.16 at all any more :(
+-- the actual 0.8.16 code is most likely lost forever
 -- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
-sourceV0715="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
+sourceV0816="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
 
 --local strings = "test,test2,test3"
 --for i in string.gmatch(strings, "([^,]*),") do
@@ -23,13 +26,24 @@ pi2 = pi * 2
 
 --function names to minify
 local clamp, getN, negativeOneIf, ifVal,
-shiftBuffer, sign, newRotor, trunc2, trunc, getTokens
+shiftBuffer, sign, newRotor, trunc2, trunc, getTokens,
+isValidNumber, numberOrZero
 
 function clamp(v,minVal,maxVal) 
 	if v==nil then return nil end
 	if v>maxVal then return maxVal end 
 	if v<minVal then return minVal end 
 	return v
+end
+
+function numberOrZero(x)
+  return x~=nil and type(x)=='number' and x or 0
+end
+
+function isValidNumber(x,invalidValue)
+  -- this evaluated correctly
+  -- local x,y = 1,nil; print(x~=nil and type(x)=='number' and (y==nil or x~=y))
+  return x~=nil and type(x)=='number' and (invalidValue==nil or x~=invalidValue))
 end
 
 function getN(...)
@@ -47,8 +61,8 @@ function ifVal(condition, ifTrue, ifFalse)
   return ifFalse
 end
 
-local state_boot, state_waitRPS, state_hover, _tokenId 
-  = 1,2,3, 0
+local _tokenId, state_boot, state_initOffset, state_waitRPS, state_hover 
+  = 0,1,2,3,4
 function getTokens(n, list)
   list = {}
   for i=1,n do
@@ -118,22 +132,24 @@ end
 local roll,pitch,yaw,coll,axis5,axis6,
 	sX,sY,sCompass,sPitch,sRoll,sTiltUp,
 	rRPS,mcTick, yawRate, rollRate, pitchRate,
-  qrAlt, throttleUp
+  qrAlt, throttleUp, rotorInputCount
 
 function onTick()
 	if inN(1) == nil then return false end -- safety check
 	
 	luaTick=luaTick+1
-	if luaTick==1 then --Init
-	
+  --[[
+	if luaTick==1 then --Init	
 	end
-	
+  --]]
+
 	roll,pitch,yaw,coll,axis5,axis6,
 	sX,sY,sCompass,sPitch,sRoll,sTiltUp,
 	rRPS,mcTick=getN(1,2,3,4,5,6,21,22,23,24,25,26,29,30)
-	qrAlt=0
-  --
-  throttleUp = 0 + ifVal(input_GetBool(11), 1, 0) - ifVal(input_GetBool(12), 1, 0)
+	qrAlt,rotorInputCount=0,0
+
+  -- so...
+  throttleUp = 0 + ifVal(input_GetBool(1), 1, 0) - ifVal(input_GetBool(2), 1, 0)
 	
   if sTiltUp<0 then
     sPitch = sPitch + (0.25 * sign(sTiltUp))
@@ -153,43 +169,76 @@ function onTick()
   yawRate = yawRate * bufferDeltaPerSecond
 
 	for i,rotor in pairs(qr) do
-		local r=rotor
-
+		--local r=rotor
 		local inputOffset=(i-1)*3 + 9
 		rotor.alt, rotor.tilt, rotor.vel =
 		  getN(inputOffset, inputOffset+1, inputOffset+2)
-		
+		rotor.hasData = false
+
 		for bufI,buffer in pairs({altBuff,velBuff,accBuff,tgVelBuff,tgAccBuff}) do
       -- Shift values forward in buffer or initialize to zero if nil
       shiftBuffer(rotor[buffer])
 		end
-		rotor.acc = rotor.vel - rotor[velBuff][1]
-		rotor.velErr = rotor.vel - rotor[tgVelBuff][1]
-		rotor[_accErr] = rotor.acc - rotor[tgAccBuff][1]
-		
-		rotor[altBuff][bufferHead] = rotor.alt
-		rotor[velBuff][bufferHead] = rotor.vel
-		rotor[accBuff][bufferHead] = rotor.acc
-		
+
+		if isValidNumber(rotor.alt,0) and isValidNumber(rotor.tilt) and isValidNumber(rotor.vel) then
+			rotor.hasData = true
+      rotorInputCount = rotorInputCount + 1
+      rotor.altRaw = rotor.alt
+      rotor.alt = rotor.alt - numberOrZero(rotor.ofs)
+      
+      qrAlt = qrAlt + rotor.alt
+      rotor.v2 = (rotor.alt - rotor[altBuff][1]) * bufferDeltaPerSecond
+      
+      rotor.acc = rotor.vel - rotor[velBuff][1]
+      rotor.velErr = rotor.vel - rotor[tgVelBuff][1]
+      rotor[_accErr] = rotor.acc - rotor[tgAccBuff][1]
+    else
+      rotor.acc, rotor.velErr, rotor[_accErr] 
+        = nil, nil, nil
+		end
+  
+    rotor[altBuff][bufferHead] = rotor.alt
+    rotor[velBuff][bufferHead] = rotor.vel
+    rotor[accBuff][bufferHead] = rotor.acc
+    -- tgVelBuff,tgAccBuff are assigned in second rotor pass
+    -- after pilot input processing
+	end
+	
+  --[[ Don't really need this unless we have 4 valid rotors
+  if rotorInputCount > 0 then
+	  qrAlt=qrAlt/rotorInputCount
+  end
+  --]]
+
+	local defPitch, dAltTG, dRotorTilt, outPitch, outRoll
+	defPitch=0
+	if state==state_boot then
+		defPitch=0.25
+		state=state_initOffset
+	end
+
+  -- Abort control code if we're not getting sensor input?
+  if rotorInputCount~=4 then 
+    return false
+  -- Long term, a manual override seems safer
+  else
+    -- OK, we have 4 valid rotor input sets
+	  qrAlt=qrAlt/rotorInputCount
+    if altTg==nil then -- and rotorInputCount==4
+      altTg=qrAlt
+    end
+    
 		if rotor.ofs==nil and rotor.alt~=0 then
 			-- should also be checking for sPitch and sRoll==0 here
 			rotor.ofs = rotor.alt
 		end
-		qrAlt = qrAlt + rotor.alt
-		rotor.v2 = (rotor.alt - rotor[altBuff][1]) * bufferDeltaPerSecond
-		
-	end
-	
-	qrAlt=qrAlt/4
-	
-	if altTg==nil then
-		if qrAlt==0 then return false end
-		altTg=qrAlt
-	end
-	local defPitch, dAltTG, dRotorTilt, outPitch, outRoll
-	defPitch=0
 
-	if state==state_boot then
+  end
+
+
+
+
+	if state==state_initOffset then
 		defPitch=0.25
 		state=state_waitRPS
 	end
