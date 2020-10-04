@@ -1,7 +1,7 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
--- V 0.6.12 Michael McHenry 2019-06-07
+-- V 0.6.13 Michael McHenry 2019-06-07
 -- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
-sourceV0612="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
+sourceV0613="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
 
 local i, o, s, m = input, output, screen, math
 local inN, outN, input_GetBool, dtb =
@@ -164,8 +164,8 @@ function onTick()
 		if qrAlt==0 then return false end
 		altTg=qrAlt
 	end
-	local defPitch, dAltTG, dRotorTilt, outPitch, outRoll =
-	  0, (coll*10)^2, (yaw*10)^2
+	local defPitch, dAltTG, dRotorTilt, outPitch, outRoll
+	defPitch=0
 
 	if state==state_boot then
 		defPitch=0.25
@@ -187,19 +187,17 @@ function onTick()
 	end
 
 	-- control input
-	if coll<0 then
-		dAltTG = dAltTG*-1
-	end
-	altTg=altTg+(dAltTG/60)
+	dAltTG = (coll*10)^2 * ifVal(coll<0,-1,1)
 	
-	
-	if yaw<0 then
-		dRotorTilt = dRotorTilt*-1
-	end
-
+  --dRotorTilt = (yaw*10)^2 * ifVal(yaw<0,-1,1)
 	--forwardPitch=forwardPitch+(dRotorTilt/60)
   forwardPitch = clamp(forwardPitch + throttleUp / (60 * 3), 0, 1)
-	
+	altTg=altTg+(dAltTG/60)
+
+  --if abs(coll) > 0.1 then
+  --  altTg = qrAlt
+  --end
+
   outPitch = pitch + (sPitch + axis5) * 2
   outRoll = roll + (sRoll) * -2
 			
@@ -303,6 +301,7 @@ function onTick()
 
 			-- Target velocity - attempt to close tgClimb in one second + 
 			rotor.tv = tgVelClimb + tgAccRollPitch
+      --  + coll * 10 -- 10m/s for climb too much? IDK
 			  
 			rotor.tgAcc = clamp((rotor.tv - rotor.vel)
 				--* bufferDeltaPerSecond -- We will attempt to reach the target velocity in 1/12 of a second (assuming bufferWidth=5)
@@ -347,6 +346,7 @@ function onTick()
 	outN(9, qrAlt)
 	outN(10, altTg)
   outN(11, outPitch)
+  outN(12, outRoll)
 end
 
 local function trunc(n) if n==nill then return "nil" end return string.format("%.f", n) end
