@@ -1,0 +1,116 @@
+Global Funcions:
+pairs
+ipairs
+next
+tostring
+tonumber
+
+additional libraries:
+math
+table
+string
+
+screen {
+  setColor(r, g, b)
+  setColor(r, g, b, a)
+  -- Clear the screen with the current color
+  drawClear()
+  drawLin(x1, y1, x2, y2)
+  drawCircle(x, y, radius)
+  drawCircleF(x, y, radius)
+  drawRect(x, y, width, height)
+  drawRectF(x, y, width, height)
+  drawTriangle()
+  drawTriangleF
+  drawText(x, y, text)
+  drawTextBox(x, y, w, h, text, h_align, v_align)
+  drawMap(x, y, zoom)
+  getWidth
+  getHeight
+}
+
+Other thoughts:
+Draw arc
+local x, y, r = 0, 0, 1
+for i = 1, 360 do
+  local angle = i * math.pi / 180
+  local ptx, pty = x + r * math.cos( angle ), y + r * math.sin( angle )
+  drawPoint( ptx, pty )
+end
+
+CrazyFluffyPony tool:
+Searching for a Lua-IDE (Editor) to write your Stormworks lua scripts that autocompletes common functions, has built in documentation, live preview, composite in/out, undo redo and just a goddamn print() function???
+Here you go ladies:
+HINT: This project is pretty fresh and will contain errors. Any help/bug reports are appreciated!
+https://lua.flaffipony.rocks/
+
+Tajin code:
+function worldToScreen(...) --x,y,z
+    if gps.x == nil then return 0,0,0 end
+    tt.x,tt.y,tt.z = ...
+
+    a1 = tr/math.cos(pi2*tf)
+    rr.y = pi2*(tu<0 and (1.5+a1)%1 or (1-a1)%1)
+    rr.x = pi2*tf
+    rr.z = pi2*cp
+
+    for k,v in pairs(rr) do
+        pp[k] = tt[k]-gps[k]
+        cc[k] = math.cos(v)
+        ss[k] = math.sin(v)
+    end    
+    a2=(cc.y*pp.z+ss.y*(ss.z*pp.y+cc.z*pp.x))
+    a3=(cc.z*pp.y-ss.z*pp.x)
+    dd.x = cc.y*(ss.z*pp.y+cc.z*pp.x)-ss.y*pp.z
+    dd.y = ss.x*a2+cc.x*a3
+    dd.z = cc.x*a2-ss.x*a3
+    px = w/2+w*((d0/dd.y)*(dd.x/h0))
+    py = h/2-h*((d0/dd.y)*(dd.z/h0))
+    return px,py,dd.y
+end
+
+https://steamcommunity.com/sharedfiles/filedetails/?id=1768426388
+
+
+https://math.stackexchange.com/a/168584
+
+
+function i3dto2d(w, h, x, y, z)
+ x = x / z
+ y = y / z
+ x = x * (h / 2)
+ y = (y + 1) * (h / 2) -- EDIT2: Oops! fixed
+ x = x + (w / 2)
+ return x, y
+end
+20kdc
+don't ask me how it works unless you like matrices
+input X/Y expected to be in -1 to 1 range for Z = 1
+higher Z will go towards back of screen
+er... fixed now. I think.
+
+function drawCircle(x,y,r,stp)
+    local xa,ya,xb,yb
+    stp=stp or 20
+    for i=1,stp do
+        xa=x-cos(math.pi*(i-1)/(stp/2))*r
+        ya=y-sin(math.pi*(i-1)/(stp/2))*r
+        xb=x-cos(math.pi*i/(stp/2))*r
+        yb=y-sin(math.pi*i/(stp/2))*r
+        screen.drawLine(xa,ya,xb,yb)
+    end
+end
+
+
+function drawCircle(x,y,r,stp)
+    local xa,ya,xb,yb
+    stp=stp or 20
+    for i=1,stp do
+        xa=x-cos(math.pi*(i-1)/(stp/2))*r
+        ya=y-sin(math.pi*(i-1)/(stp/2))*r
+        xb=x-cos(math.pi*i/(stp/2))*r
+        yb=y-sin(math.pi*i/(stp/2))*r
+        screen.drawLine(xa,ya,xb,yb)
+    end
+end
+
