@@ -1,15 +1,20 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
--- V 0.6.08 Michael McHenry 2019-06-07
-sourceV0608="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
+-- V 0.6.12 Michael McHenry 2019-06-07
+-- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
+sourceV0612="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
 
 local i, o, s, m = input, output, screen, math
-local inN, outN, input_GetBool
-  = i.getNumber, o.setNumber, i.getBool
+local inN, outN, input_GetBool, dtb =
+  i.getNumber, 
+  o.setNumber, 
+  i.getBool,
+  s.drawTextBox
 
-local abs, sin, cos, mathmax =
-  m.abs, m.sin, m.cos, m.max
-pi = m.pi
+local abs, sin, cos, mathmax, pi, pi2 =
+  m.abs, m.sin, m.cos, m.max,
+  m.pi
 pi2 = pi * 2
+
 local function clamp(v,minVal,maxVal) 
 	if v==nil then return nil end
 	if v>maxVal then return maxVal end 
@@ -33,7 +38,9 @@ local function ifVal(condition, ifTrue, ifFalse)
 end
 
 local altBuff, velBuff, accBuff, tgVelBuff, tgAccBuff
+, _pitch, _accErr
  = "altBuff", "velBuff", "accBuff", "tgVelBuff", "tgAccBuff"
+ , "pitch", "accErr"
 
 local function newRotor()
 	local rotor = {
@@ -41,10 +48,11 @@ local function newRotor()
 		alt=0,
 		tilt=0,
 		vel=0,
-		pitch=0.25,
 		rot=0,
 		pC=nil,pP=0,pR=0
 	}
+  rotor[_accErr] = nil
+  rotor[_pitch] = 0.25
 	rotor[altBuff] = {}
 	rotor[velBuff] = {}
 	rotor[accBuff] = {}
@@ -53,18 +61,26 @@ local function newRotor()
 	return rotor
 end
 
-local state, lastTick, luaTick, altTg, bufferWidth, bufferHead, bufferDeltaPerSecond, forwardPitch, qr, yawBuff
-luaTick=0
-state="boot"
-lastTick=-1
-forwardPitch=0
+local state_boot, state_waitRPS, state_hover = 1,2,3
+local luaTick, lastTick, state, forwardPitch, qr, 
+  altTg, bufferWidth, bufferHead, bufferDeltaPerSecond =
+  0, -- luaTick=
+  -1, -- lastTick=
+  state_boot, -- state=
+  0 -- forwardPitch=
+  --qr=
+  ,{newRotor(),newRotor(),newRotor(),newRotor()}
 
 bufferWidth = 5
 bufferHead = bufferWidth+1
 bufferDeltaPerSecond = 60 / bufferWidth
-yawBuff={}
-
-qr={newRotor(),newRotor(),newRotor(),newRotor()}
+local buffers, bfRoll, bfPitch, bfYaw,
+  bfTargetRoll, bfTargetPitch, bfTargetYaw, bufferList
+  ={},1,2,3,4,5,6
+bufferList = {bfRoll, bfPitch, bfYaw, bfTargetRoll, bfTargetPitch, bfTargetYaw}
+for i,v in pairs(bufferList) do
+  buffers[v]={}
+end
 
 local function shiftBuffer(buffer)
     for bufferIndex=1, bufferWidth do
@@ -73,9 +89,14 @@ local function shiftBuffer(buffer)
     end
 end
 
+local function sign(x)
+  return x>0 and 1 or x<0 and -1 or 0
+end
+
 local roll,pitch,yaw,coll,axis5,axis6,
-	sX,sY,sCompass,sPitch,sRoll,
-	rRPS,mcTick, yawRate
+	sX,sY,sCompass,sPitch,sRoll,sTiltUp,
+	rRPS,mcTick, yawRate, rollRate, pitchRate,
+  qrAlt, throttleUp
 
 function onTick()
 	if inN(1) == nil then return false end -- safety check
@@ -86,15 +107,25 @@ function onTick()
 	end
 	
 	roll,pitch,yaw,coll,axis5,axis6,
-	sX,sY,sCompass,sPitch,sRoll,
-	rRPS,mcTick=getN(1,2,3,4,5,6,21,22,23,24,25,29,30)
+	sX,sY,sCompass,sPitch,sRoll,sTiltUp,
+	rRPS,mcTick=getN(1,2,3,4,5,6,21,22,23,24,25,26,29,30)
 	qrAlt=0
   --
   throttleUp = 0 + ifVal(input_GetBool(11), 1, 0) - ifVal(input_GetBool(12), 1, 0)
 	
-  shiftBuffer(yawBuff)
-  yawBuff[bufferHead] = sCompass
-  yawRate = sCompass - yawBuff[1]
+  if sTiltUp<0 then
+    sPitch = sPitch + (0.25 * sign(sTiltUp))
+  end
+
+  for i,v in pairs(bufferList) do
+    shiftBuffer(buffers[v])
+  end
+  buffers[bfYaw][bufferHead] = sCompass
+  buffers[bfRoll][bufferHead] = sRoll
+  buffers[bfPitch][bufferHead] = sPitch
+  yawRate = sCompass - buffers[bfYaw][1]
+  rollRate = (sRoll - buffers[bfRoll][1]) * bufferDeltaPerSecond
+  pitchRate = (sPitch - buffers[bfYaw][1]) * bufferDeltaPerSecond
   if yawRate > .5 then yawRate = yawRate - 1 end
   if yawRate < -.5 then yawRate = yawRate + 1 end
   yawRate = yawRate * bufferDeltaPerSecond
@@ -111,15 +142,15 @@ function onTick()
       shiftBuffer(rotor[buffer])
 		end
 		rotor.acc = rotor.vel - rotor.velBuff[1]
-		rotor.velErr = rotor.vel - rotor.tgVelBuff[1]
-		rotor.accErr = rotor.acc - rotor.tgAccBuff[1]
+		rotor.velErr = rotor.vel - rotor[tgVelBuff][1]
+		rotor[_accErr] = rotor.acc - rotor[tgAccBuff][1]
 		
-		rotor.altBuff[bufferHead] = rotor.alt
-		rotor.velBuff[bufferHead] = rotor.vel
-		rotor.accBuff[bufferHead] = rotor.acc
+		rotor[altBuff][bufferHead] = rotor.alt
+		rotor[velBuff][bufferHead] = rotor.vel
+		rotor[accBuff][bufferHead] = rotor.acc
 		
 		if rotor.ofs==nil and rotor.alt~=0 then
-			-- should also be checking for spitch and sroll==0 here
+			-- should also be checking for sPitch and sRoll==0 here
 			rotor.ofs = rotor.alt
 		end
 		qrAlt = qrAlt + rotor.alt
@@ -133,21 +164,17 @@ function onTick()
 		if qrAlt==0 then return false end
 		altTg=qrAlt
 	end
-	
-	local defPitch = 0
-	if state=="boot" then
+	local defPitch, dAltTG, dRotorTilt, outPitch, outRoll
+	defPitch=0
+
+	if state==state_boot then
 		defPitch=0.25
-		state="bootWaitRPS_5"
+		state=state_waitRPS
 	end
-	if state=="bootWaitRPS_5" then
-		defPitch=0
-		if rRPS>5 then state="bootWaitRPS_60" end
-	end
-	if state=="bootWaitRPS_60"then
+	if state==state_waitRPS then
 		defPitch=0.10
-		
-		if rRPS>60 then
-			state="findHover"
+		if rRPS>25 then 
+      state=state_hover
 			altTg=qrAlt+1
 			for i,r in pairs(qr) do
 				r.ofs=r.alt-qrAlt
@@ -156,37 +183,38 @@ function onTick()
 				r.conf=0
 				r.tv=0
 			end
-		end
+    end
 	end
-	
+
 	-- control input
-	local dAltTG,dRotorTilt = (coll*10)^2, (yaw*10)^2
-	if coll<0 then
-		dAltTG = dAltTG*-1
-	end
-	altTg=altTg+(dAltTG/60)
+	dAltTG = (coll*10)^2 * ifVal(coll<0,-1,1)
 	
-	
-	if yaw<0 then
-		dRotorTilt = dRotorTilt*-1
-	end
+  --dRotorTilt = (yaw*10)^2 * ifVal(yaw<0,-1,1)
 	--forwardPitch=forwardPitch+(dRotorTilt/60)
   forwardPitch = clamp(forwardPitch + throttleUp / (60 * 3), 0, 1)
-		
+	altTg=altTg+(dAltTG/60)
+
+  --if abs(coll) > 0.1 then
+  --  altTg = qrAlt
+  --end
+
+  outPitch = pitch + (sPitch + axis5) * 2
+  outRoll = roll + (sRoll) * -2
+			
 	for i,rotor in pairs(qr) do
-		local r = rotor
 
     local yawTwist = clamp( (yaw + yawRate*4) * 0.25, -.25, .25)
     if i==2 or i==4 then yawTwist = -yawTwist end
 		rotor.rot = forwardPitch + yawTwist
 				
-		if state~="findHover" then
-    
-		  rotor.pitch = defPitch
+		if state~=state_hover then
+		  rotor[_pitch] = defPitch
     else
-			
 			-- Target velocity (m/s) will be based on...
-			local rotorAngle, tiltThrustX, tiltThrustY, tiltThrustPctY, climbThrustAdjust
+			local rotorAngle, tiltThrustX, tiltThrustY, tiltThrustPctY, climbThrustAdjust,
+      tgVelClimb, tgAccClimb, tgVelRollPitch, tgAccRollPitch, maxAltHoldVelocity,
+      climbRate, climbVel, rotorAxisPolarity, pTiltCorrection, pitchLevelTarget, newPitch, pitchChange
+
 			rotorAngle = rotor.tilt * pi2
 			tiltThrustX = cos(rotorAngle)
 			tiltThrustY = sin(rotorAngle)
@@ -210,14 +238,14 @@ function onTick()
 			end
 			
 			-- Average altitude climb rate from the last 0.8ish seconds:
-			local climbRate = rotor.v2
+			climbRate = rotor.v2
 			  -- (based on rotor.v2 = (rotor.alt - rotor.[altBuff][1]) * bufferDeltaPerSecond)
 			-- current velocity may be a better prediction
-			local climbVel = rotor.vel * tiltThrustY
+			climbVel = rotor.vel * tiltThrustY
 			  --   rotor.vel from sensor is speed in the direction of the rotor
 			  --   * tiltThrustY gets Y portion corrected for rotor tilt
 			
-      local tgVelClimb, tgAccClimb, tgVelRollPitch, tgAccRollPitch, maxAltHoldVelocity
+      
 			--rotor.tg = altTg + rotor.ofs
       rotor.tg = rotor.alt + (altTg-qrAlt )
       
@@ -245,14 +273,14 @@ function onTick()
 
 
 			-- Add in pitch control/correction contribution to target velocity
-			local rotorAxisPolarity = negativeOneIf(i < 3) -- Front rotors are negative
-      local pTiltCorrection = 36 --ifVal(abs(pitch)<0.5,12,0)
-      local pitchLevelTarget = sPitch + axis5
+			rotorAxisPolarity = negativeOneIf(i < 3) -- Front rotors are negative
+      pTiltCorrection = 36 --ifVal(abs(pitch)<0.5,12,0)
+      pitchLevelTarget = sPitch + axis5
       
       tgVelRollPitch = clamp(
 			  (pitch * 6 + pitchLevelTarget * pTiltCorrection) * rotorAxisPolarity
 				- rotor.vel * 0.5 -- How far we'll have be half a second from now. Should cut down on oversteer
-			  , -0.25, 12)
+			  , -1, 12)
       tgAccRollPitch = clamp(tgVelRollPitch - rotor.vel
         , -2, 2)
       tgVelRollPitch = rotor.vel + tgAccRollPitch
@@ -264,7 +292,7 @@ function onTick()
       tgVelRollPitch = clamp(
 			  (roll * 6 - sRoll*rTiltCorrection) * rotorAxisPolarity -- sRoll points left, so positive values need negative correction
 				- rotor.vel * 0.5 -- How far we'll have be half a second from now. Should cut down on oversteer
-			  , -0.25, 8)
+			  , -1, 8)
         + tgVelRollPitch -- existing contribution from pitch
 
       tgAccRollPitch = clamp(tgVelRollPitch - rotor.vel
@@ -273,56 +301,57 @@ function onTick()
 
 			-- Target velocity - attempt to close tgClimb in one second + 
 			rotor.tv = tgVelClimb + tgAccRollPitch
+      --  + coll * 10 -- 10m/s for climb too much? IDK
 			  
 			rotor.tgAcc = clamp((rotor.tv - rotor.vel)
 				--* bufferDeltaPerSecond -- We will attempt to reach the target velocity in 1/12 of a second (assuming bufferWidth=5)
 				, -10, 10)
 			
-      local newPitch,pitchChange
       newPitch = rotor.pC * climbThrustAdjust 
 				+ (rotor.pC * 0.1 * rotor.tgAcc)
         + (forwardPitch * axis6)
-			pitchChange = clamp(newPitch - rotor.pitch, -0.05, 0.05) 
-			rotor.pitch = rotor.pitch + pitchChange
+			pitchChange = clamp(newPitch - rotor[_pitch], -0.05, 0.05) 
+			rotor[_pitch] = rotor[_pitch] + pitchChange
 
-			rotor.tgVelBuff[bufferHead] = rotor.tv
-			rotor.tgAccBuff[bufferHead] = rotor.tgAcc
+			rotor[tgVelBuff][bufferHead] = rotor.tv
+			rotor[tgAccBuff][bufferHead] = rotor.tgAcc
 			
 			-- These were already calculated above:
 			--rotor.velErr = rotor.vel - rotor.tgVelBuff[1]
 			--rotor.accErr = rotor.acc - rotor.tgAccBuff[1]
 			
-			if rotor.accErr<-1 then
+			if rotor[_accErr]<-1 then
 				rotor.pC=clamp(
-          rotor.pC+0.001*abs(rotor.accErr)*0.5,
+          rotor.pC+0.001*abs(rotor[_accErr])*0.5,
           0.1, 0.6)
 				rotor.conf=rotor.conf-0.01
 			end
-			if rotor.accErr>4 then
+			if rotor[_accErr]>4 then
 				rotor.pC=clamp(
-          rotor.pC-0.001*rotor.accErr*0.5,
+          rotor.pC-0.001*rotor[_accErr]*0.5,
           0.1, 0.6)
 				rotor.conf=rotor.conf-0.01
 			end
 			if --abs(rotor.tg-rotor.alt)<0.02 and 
-			  abs(rotor.accErr)<0.5 then
-				r.conf=r.conf+0.01
+			  abs(rotor[_accErr])<0.5 then
+				rotor.conf=rotor.conf+0.01
 			end
-			
 			
 		end
 		
-		outN(i,rotor.pitch)
+		outN(i,rotor[_pitch])
 		outN(i+4,rotor.rot)
 	end
 	
 	outN(9, qrAlt)
 	outN(10, altTg)
+  outN(11, outPitch)
+  outN(12, outRoll)
 end
 
 local function trunc(n) if n==nill then return "nil" end return string.format("%.f", n) end
 local function trunc2(n) if n==nill then return "nil" end return string.format("%.2f", n) end
-local dtb=screen.drawTextBox
+
 
 
 function onDraw()
@@ -350,7 +379,7 @@ function onDraw()
 	
 	tDiff=luaTick-mcTick
 	pVal("State",state)
-	--pVal("TickDiff",trunc2(tDiff))
+	pVal("TickDiff",trunc2(tDiff))
 	--pVal("Roll",trunc2(roll))
 	--pVal("Pitch",trunc2(pitch))
 	--pVal("Yaw",trunc2(yaw))
@@ -361,25 +390,25 @@ function onDraw()
 	--pVal("dAlt",trunc2(dAlt))
   pVal("sCompass", trunc2(sCompass))
   pVal("yawRate", trunc2(yawRate))
-	pVal("sPitch",trunc2(sPitch))
-	pVal("sRoll",trunc2(sRoll))
+	--pVal("sPitch",trunc2(sPitch))
+	--pVal("sRoll",trunc2(sRoll))
 	
 	for i,r in pairs(qr) do
-		--pVal("Rotor",trunc(i))
-		pVal("Alt"..trunc(i),trunc2(r.alt))
-		pVal("Ofs",trunc2(r.ofs))
-		pVal("Tilt",trunc2(r.tilt))
-		pVal("Vel",trunc2(r.vel))
-		pVal("Vel2",trunc2(r.v2))
-		pVal("TG",trunc2(r.tg))
-		pVal("TVel",trunc2(r.tv))
-		pVal("TAcc",trunc2(r.tgAcc))
-		pVal("vErr",trunc2(r.velErr))
-		pVal("aErr",trunc2(r.accErr))
-
 		pVal(trunc(i).."pColl",trunc2(r.pC))
 		pVal(trunc(i).."Confdnc",trunc2(r.conf))
-		--pVal(trunc(i).."Pitch",trunc2(r.pitch))
+		--pVal("Rotor",trunc(i))
+		--pVal("Alt"..trunc(i),trunc2(r.alt))
+		--pVal("Ofs",trunc2(r.ofs))
+		--pVal("Tilt",trunc2(r.tilt))
+		pVal("Vel",trunc2(r.vel))
+		pVal("Vel2",trunc2(r.v2))
+		--pVal("TG",trunc2(r.tg))
+		--pVal("TVel",trunc2(r.tv))
+		--pVal("TAcc",trunc2(r.tgAcc))
+		pVal("vErr",trunc2(r.velErr))
+		pVal("aErr",trunc2(r[_accErr]))
+
+		--pVal(trunc(i).."Pitch",trunc2(r[_pitch]))
 	end
 	
 end
