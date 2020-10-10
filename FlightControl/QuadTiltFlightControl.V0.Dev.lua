@@ -1,20 +1,33 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
--- V 0.9.19 Michael McHenry 2020-09-22
+-- V 0.10.20g Michael McHenry 2020-10-05
 -- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
-sourceV0919="https://repl.it/@mgmchenry/Stormworks"
+sourceV1020h="https://repl.it/@mgmchenry/Stormworks"
 
 --local strings = "test,test2,test3"
 --for i in string.gmatch(strings, "([^,]*),") do
 --   print(i)
 --end
 
-local _i, _o, _s, _m = input, output, screen, math
-local inN, outN, input_GetBool, dtb, tableUnpack =
+--[[
+100, -950
+0, -4750
+--]]
+
+local _i, _o, _m
+--, nilzies
+  = input
+  , output
+  , math
+  --, _s
+  --, screen
+
+local inN, outN, input_GetBool, tableUnpack =
   _i.getNumber, 
   _o.setNumber, 
   _i.getBool,
-  _s.drawTextBox,
   table.unpack
+--, dtb
+--  _s.drawTextBox,
 
 local abs, sin, cos, mathmax, pi
    --, pi2 
@@ -24,51 +37,29 @@ local abs, sin, cos, mathmax, pi
   --, _m.pi * 2
 
 --function names to minify
-local clamp, getN, negativeOneIf, ifVal,
-shiftBuffer, sign, newRotor, trunc2, trunc, getTokens,
-isValidNumber, numberOrZero
+local clamp, getN, negativeOneIf, ifVal
+,shiftBuffer, sign, newRotor, trunc2
+, trunc, getTokens, isValidNumber, numberOrZero
+--, getSomeIndexValues
 
 
 function ifVal(condition, ifTrue, ifFalse)
-  --[[
-  if condition then return ifTrue end
-  return ifFalse
-  --]]
   return condition and ifTrue or ifFalse
 end
 function negativeOneIf(condition)
-	--[[
-  if condition then return -1 end
-	return 1
-  --]]
   return condition and -1 or 1
 end
-
 function isValidNumber(x,invalidValue)
-  -- this evaluated correctly
-  -- local x,y = 1,nil; print(x~=nil and type(x)=='number' and (y==nil or x~=y))
-  --return x~=nil and type(x)=='number' and (invalidValue==nil or x~=invalidValue)
-  -- this should work just as well and is a tad shorter:
-  return x~=nil and type(x)=='number' and x~=invalidValue
+  return x~=nilzies and type(x)=='number' and x~=invalidValue
 end
 
 function clamp(v,minVal,maxVal) 
-  --[[
-	if v==nil then return nil end
-	if v>maxVal then return maxVal end 
-	if v<minVal then return minVal end 
-	return v
-  --]]
   return isValidNumber(v) and
     (v>maxVal and maxVal or
       (v<minVal and minVal) or
       v
     )
-    or nil
-end
-
-function numberOrZero(x)
-  return x~=nil and type(x)=='number' and x or 0
+    or nilzies
 end
 
 function getN(...)
@@ -80,14 +71,38 @@ end
 
 local _tokenId, state_boot, state_initOffset, state_waitRPS, state_hover 
   = 0,1,2,3,4
-function getTokens(n, list)
-  list = {}
+function getTokens(n, list, prefix)
+  list, prefix
+    = list or {}
+    , prefix or "token_"
   for i=1,n do
     _tokenId = _tokenId + 1
-    list[i] = "token_".._tokenId
+    list[#list+1] = prefix .. _tokenId
   end
   return tableUnpack(list)
 end
+
+--[[
+we're going to try local nilz to save a few bytes
+Test with sourceV1020g
+Before
+17,380 bytes
+After
+3,876 bytes
+
+local t_tokenList = "tokenorwhatever"
+
+function newSet(tokenCount, set)
+  set = set or {}
+  set[t_tokenList] = getTokens(tokenCount, set[t_tokenList])
+end
+fruitSet = newSet(6)
+fruitSet = {token1 = nil, token2 = nil, etc, token6 = nil}
+local orange, banana, apple, cherry, melon, lemon = getTokens(fruitSet)
+
+--]]
+
+
 
 local altBuff, velBuff, accBuff, tgVelBuff, tgAccBuff
 , _pitch, _accErr
@@ -97,14 +112,14 @@ local altBuff, velBuff, accBuff, tgVelBuff, tgAccBuff
 
 function newRotor()
   local rotor = {
-    ofs=nil,
+    ofs=nilzies,
     alt=0,
     tilt=0,
     vel=0,
     rot=0,
-    pC=nil,pP=0,pR=0
+    pC=nilzies,pP=0,pR=0
   }
-  rotor[_accErr] = nil
+  rotor[_accErr] = nilzies
   rotor[_pitch] = 0.25
   rotor[altBuff] = {}
   rotor[velBuff] = {}
@@ -114,6 +129,33 @@ function newRotor()
   return rotor
 end
 
+-- Tajin pid code
+function pid(p,i,d)
+    return{p=p,i=i,d=d,E=0,D=0,I=0,
+		run=function(s,sp,pv)
+			local E,D,A
+			E = sp-pv
+			D = E-s.E
+			A = math.abs(D-s.D)
+			s.E = E
+			s.D = D
+			s.I = A<E and s.I +E*s.i or s.I*0.5
+			return E*s.p +(A<E and s.I or 0) +D*s.d
+		end
+	}
+end
+
+--[[ Tajin pid example
+pid1 = pid(0.01,0.0005, 0.05)
+pid2 = pid(0.1,0.00001, 0.005)
+function onTick()
+	setpoint = input.getNumber(1)
+	pv1 = input.getNumber(2)
+	pv2 = input.getNumber(3)
+	output.setNumber(1,pid1:run(setpoint,pv1))
+	output.setNumber(2,pid2:run(setpoint,pv2))
+end
+--]]
 
 local luaTick, lastTick, state, forwardPitch, qr, 
   altTg, bufferWidth, bufferHead, bufferDeltaPerSecond =
@@ -127,13 +169,38 @@ local luaTick, lastTick, state, forwardPitch, qr,
 bufferWidth = 5
 bufferHead = bufferWidth+1
 bufferDeltaPerSecond = 60 / bufferWidth
-local buffers, bfRoll, bfPitch, bfYaw,
-  bfTargetRoll, bfTargetPitch, bfTargetYaw, bufferList
-  ={},1,2,3,4,5,6
-bufferList = {bfRoll, bfPitch, bfYaw, bfTargetRoll, bfTargetPitch, bfTargetYaw}
+local buffers
+  , bfRoll, bfPitch, bfYaw
+  , bfTargetRoll, bfTargetPitch, bfTargetYaw
+  , bfXPos,bfYPos
+  , bufferList
+  ={}
+  --,getSomeIndexValues(8)
+  ,1,2,3,4,5,6,7,8
+bufferList = {bfRoll, bfPitch, bfYaw, bfTargetRoll, bfTargetPitch, bfTargetYaw
+,bfXPos,bfYPos}
 for i,v in pairs(bufferList) do
   buffers[v]={}
 end
+
+local signals
+  , s_Xpos, s_Ypos, s_Heading
+  , signalList
+  = {}
+  ,1,2,3
+  , {}
+signalList = {s_Xpos, s_Ypos, s_Heading}
+
+--[[
+signal (ex yaw) has:
+value (could be nil?)
+ valueBuffer
+target (could be nil?)
+ targetBuffer
+difference () nil or zero?
+
+
+]]
 
 function shiftBuffer(buffer)
     for bufferIndex=1, bufferWidth do
@@ -152,7 +219,7 @@ local pilotInputRoll,pitch,yaw,coll,axis5,axis6,
   qrAlt, throttleUp, rotorInputCount
 
 function onTick()
-	if inN(1) == nil then return false end -- safety check
+	if inN(1) == nilzies then return false end -- safety check
 	
 	luaTick=luaTick+1
   --[[
@@ -182,12 +249,21 @@ function onTick()
   buffers[bfYaw][bufferHead] = sCompass
   buffers[bfRoll][bufferHead] = sRoll
   buffers[bfPitch][bufferHead] = sPitch
+  buffers[bfXPos][bufferHead] = sX
+  buffers[bfYPos][bufferHead] = sY
   yawRate = sCompass - buffers[bfYaw][1]
   rollRate = (sRoll - buffers[bfRoll][1]) * bufferDeltaPerSecond
   pitchRate = (sPitch - buffers[bfYaw][1]) * bufferDeltaPerSecond
   if yawRate > .5 then yawRate = yawRate - 1 end
   if yawRate < -.5 then yawRate = yawRate + 1 end
   yawRate = yawRate * bufferDeltaPerSecond
+
+  --[[ This will be helpful to add in
+  xVel = (buffers[bfXPos][bufferHead] - buffers[bfXPos][1]) * bufferDeltaPerSecond
+  yVel = (buffers[bfYPos][bufferHead] - buffers[bfYPos][1]) * bufferDeltaPerSecond
+  velAngle = atan2(yVel, xVel) / pi2
+  head = buffers[bfYaw][1] + 0.25
+  --]]
 
 	for i,rotor in pairs(qr) do
 		--local r=rotor
@@ -207,7 +283,7 @@ function onTick()
       --adjusting the alt by the offset here is not the right thing to do
       -- that only applies to setting the target alt
       --rotor.altRaw = rotor.alt
-      --rotor.alt = rotor.alt - numberOrZero(rotor.ofs)     
+      --rotor.alt = rotor.alt - (rotor.ofs or 0)     
       qrAlt = qrAlt + rotor.alt
       rotor.v2 = (rotor.alt - rotor[altBuff][1]) * bufferDeltaPerSecond
       
@@ -216,7 +292,7 @@ function onTick()
       rotor[_accErr] = rotor.acc - rotor[tgAccBuff][1]
     else
       rotor.acc, rotor.velErr, rotor[_accErr] 
-        = nil, nil, nil
+        = nilzies, nilzies, nilzies
 		end
   
     rotor[altBuff][bufferHead] = rotor.alt
@@ -255,7 +331,7 @@ function onTick()
       -- at an angle
     end
     
-    if altTg==nil then -- and rotorInputCount==4
+    if altTg==nilzies then -- and rotorInputCount==4
       altTg=qrAlt
     end
 
@@ -305,7 +381,11 @@ function onTick()
       -- tiltYawTaper =
       , clamp(2 - forwardPitch * 4,0,1)
     if i==2 or i==4 then yawTwist = -yawTwist end
-		rotor.rot = forwardPitch + (yawTwist * tiltYawTaper)
+
+		rotor.rot = forwardPitch 
+      + (yawTwist * tiltYawTaper)
+      -- trying yaw with pitch diff instead of tilt diff
+
 				
 		if state~=state_hover then
 		  rotor[_pitch] = defPitch
@@ -418,6 +498,26 @@ function onTick()
         yp = yaw * negativeOneIf(i==2 or i==4)
         newPitch = newPitch + yp
       end
+      
+      --[[
+        I tried the usual way of quad rotor yaw of increasing torque in two opposite corners, but it was not very effective or consistent when tested in game
+
+      -- yawTwist isn't on axis with yaw pitch differential as defined above:
+      yawTwist, tiltYawTaper 
+      = clamp( (yaw 
+        --+ yawRate*4
+          ) * 4
+          * rotor.pC * 0.1
+          * negativeOneIf(i==1 or i==4)
+          , -.5, .5)
+      -- tilt for yaw should taper off between .25 and .5 forwardPitch
+      -- tiltYawTaper =
+      , clamp(2 - forwardPitch * 4,0,1)
+      --if i==2 or i==4 then yawTwist = -yawTwist end
+      yawTwist = clamp(yawTwist * ifVal(yawTwist < 0,0.25, 1),-0.2,0.5)
+      newPitch = newPitch + yawTwist * tiltYawTaper
+
+      --]]
 
 
 			pitchChange = clamp(newPitch - rotor[_pitch], -0.2, 0.2) 
@@ -463,6 +563,7 @@ end
 function trunc(n) if n==nil then return "nil" end return string.format("%.f", n) end
 function trunc2(n) if n==nil then return "nil" end return string.format("%.2f", n) end
 --]]
+--[[
 function trunc(n) return n==nil and "nil" or string.format("%.f", n) end
 function trunc2(n) return n==nil and "nil" or string.format("%.2f", n) end
 
@@ -524,3 +625,4 @@ function onDraw()
 	end
 	
 end 
+--]]

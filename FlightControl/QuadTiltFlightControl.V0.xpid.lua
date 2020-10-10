@@ -1,20 +1,28 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
--- V 0.9.19 Michael McHenry 2020-09-22
+-- V 0 PID .10.20 Michael McHenry 2020-10-04
 -- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
-sourceV0919="https://repl.it/@mgmchenry/Stormworks"
+sourceV0P1020="https://repl.it/@mgmchenry/Stormworks"
 
 --local strings = "test,test2,test3"
 --for i in string.gmatch(strings, "([^,]*),") do
 --   print(i)
 --end
 
-local _i, _o, _s, _m = input, output, screen, math
-local inN, outN, input_GetBool, dtb, tableUnpack =
+local _i, _o, _m 
+  = input
+  , output
+  , math
+  --, _s
+  --, screen
+
+local inN, outN, input_GetBool, tableUnpack =
   _i.getNumber, 
   _o.setNumber, 
   _i.getBool,
-  _s.drawTextBox,
   table.unpack
+--, dtb
+--  _s.drawTextBox,
+
 
 local abs, sin, cos, mathmax, pi
    --, pi2 
@@ -463,6 +471,7 @@ end
 function trunc(n) if n==nil then return "nil" end return string.format("%.f", n) end
 function trunc2(n) if n==nil then return "nil" end return string.format("%.2f", n) end
 --]]
+--[[
 function trunc(n) return n==nil and "nil" or string.format("%.f", n) end
 function trunc2(n) return n==nil and "nil" or string.format("%.2f", n) end
 
@@ -523,4 +532,5 @@ function onDraw()
 		--pVal(trunc(i).."Pitch",trunc2(r[_pitch]))
 	end
 	
-end 
+end
+--]]

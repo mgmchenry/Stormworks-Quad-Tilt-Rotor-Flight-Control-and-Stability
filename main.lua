@@ -3,14 +3,38 @@
 inValues, outValues, inBools, outBools = {}, {}, {}, {}
 table.unpack = table.unpack or unpack
 
+
+--[[
+getSomeIndexValues validation
+
+ x = {}; x[1]=1; x[2]=2; x[3]=3; print(unpack(x)); print(# x)
+1   2   3
+3
+ x = {}; x[3]=3; x[4]=4; x[5]=5; print(unpack(x)); print(# x)
+
+0
+ x = {}; x[1]=1; x[4]=4; x[5]=5; print(unpack(x)); print(# x)
+1
+1
+
+ x = {}; x[#x+1]=1; x[#x+1]=2; x[#x+1]=3; print(unpack(x)); print(# x)
+1   2   3
+3
+ x = {}; x[#x+1]=3; x[#x+1]=4; x[#x+1]=5; print(unpack(x)); print(# x)
+3   4   5
+3
+--]]
+
 -- Set up SW environment
 dofile("Stormworks_Stub.lua")
+
 
 propValues["BaseIndex"] = 1
 --dofile("QuadFlightControl.V0.07.15.lua")
 --dofile("ScaleController.V2.lua")
 --dofile("QuadFlightControl.V0.09.18.lua")
-dofile("RailPulseEncoder.lua")
+dofile("FlightControl/QuadTiltFlightControl.V0.Dev.lua")
+--dofile("RailPulseEncoder.lua")
 --dofile("OnOffDecoder.lua")
 
 --runTest(function() onTick() end, "onTick")
