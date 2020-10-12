@@ -3,14 +3,6 @@
 -- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
 sourceV0614="https://repl.it/@mgmchenry/Stormworks-Quad-Tilt-Rotor-Flight-Control-and-Stability"
 
---[[
-fluffypony test rig here:
-https://lua.flaffipony.rocks/?id=aRvUfMKBX
-update - 
-https://lua.flaffipony.rocks/?id=Ymx7HBq7k
-
---]]
-
 --local strings = "test,test2,test3"
 --for i in string.gmatch(strings, "([^,]*),") do
 --   print(i)
@@ -207,7 +199,7 @@ function onTick()
 				
 end
 
-function trunc(n) if n==nill then return "nil" end return string.format("%.f", n) end
+ trunc(n) if n==nill then return "nil" end return string.format("%.f", n) end
 function trunc2(n) if n==nill then return "nil" end return string.format("%.2f", n) end
 
 
@@ -348,41 +340,10 @@ function onDraw()
 	--pVal("qrAlt",trunc2(qrAlt))
 	--pVal("AltTg",trunc2(altTg))
 	--pVal("dAlt",trunc2(dAlt))
-  pVal("sCompass", trunc2(sCompass))
+  --pVal("sCompass", trunc2(sCompass))
   --pVal("yawRate", trunc2(yawRate))
 	--pVal("sPitch",trunc2(sPitch))
 	--pVal("sRoll",trunc2(sRoll))
-
-  xVel = (buffers[bfXPos][bufferHead] - buffers[bfXPos][1]) * bufferDeltaPerSecond
-  yVel = (buffers[bfYPos][bufferHead] - buffers[bfYPos][1]) * bufferDeltaPerSecond
-  velAngle = atan2(yVel, xVel) / pi2
-  head = buffers[bfYaw][1] + 0.25
-  xyVel = sqrt(xVel*xVel + yVel*yVel)
-
-  pVal("head", trunc2(head))    
-  pVal("xVel", trunc2(xVel))  
-  pVal("vAngle", trunc2(velAngle))
-  pVal("xyVel", trunc2(xyVel))
-
-  polarOffset = head
-
-    sideDrift = sin(pi2 * (velAngle - polarOffset)) * -xyVel
-    headDrift = cos(pi2 * (velAngle - polarOffset)) * xyVel
-    
-  pVal("sDrift", trunc2(sideDrift))
-  pVal("hDrift", trunc2(headDrift))
-
-  --[[
-    xyFactor = mathmin(1, 10 / xyVel)
-    
-    setColor(0, 255, 0)
-    --xa = displayX+xVel*xyFactor*(tickWidth/2)
-    --ya = displayY+yVel*xyFactor*(tickWidth/2)
-    --if polarOffset ~= 0 then
-    xa = displayX - sin(pi2 * (velAngle - polarOffset)) * mathmin(10, xyVel)*(tickWidth/2)
-    ya = displayY - cos(pi2 * (velAngle - polarOffset)) * mathmin(10, xyVel)*(tickWidth/2)
-
-  --]]
 	
 	for i,r in pairs(qr) do
 		--pVal(trunc(i).."pColl",trunc2(r.pC))

@@ -1,48 +1,60 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
--- V 0.10.21a Michael McHenry 2020-10-10
+-- Signals Refactor
+-- VS 0.S11.22a Michael McHenry 2020-10-10
 -- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
-sourceV1021b="https://repl.it/@mgmchenry/Stormworks"
+sourceVS1122a="https://repl.it/@mgmchenry/Stormworks"
 
+-- I have this idea for putting string constant values in a text property so further cut down on code size
 --local strings = "test,test2,test3"
 --for i in string.gmatch(strings, "([^,]*),") do
 --   print(i)
 --end
 
---[[
-100, -950
-0, -4750
---]]
-
 local _i, _o, _m
---, nilzies
+  , nilzies
   = input
   , output
   , math
-  --, _s
-  --, screen
+-- nilzies not assigned by design - it's just nil but minimizes to one letter
 
-local inN, outN, input_GetBool, tableUnpack =
-  _i.getNumber, 
-  _o.setNumber, 
-  _i.getBool,
-  table.unpack
---, dtb
---  _s.drawTextBox,
+-- if I run out of upvalues again, can probably move input/output functions to processing logic scope
+local 
+  inN, outN, input_GetBool
+  , tableUnpack, ipairz 
+  = _i.getNumber
+  , _o.setNumber 
+  , _i.getBool
+  , table.unpack
+  , ipairs
 
-local abs, sin, cos, mathmax
+local 
+  -- library function names to minify
+  abs, sin, cos, mathmax
   , atan2, sqrt
   , pi, pi2
+  -- script scope variables with static defined starting value
+  , _tokenId
+  -- script scope function names to minify
+  , ifVal
+  , negativeOneIf
+  , isValidNumber
+  , baseOneModulo
+  , sign
+  , clamp
+  , getInputNumbers
+  , getTokens
+
+  ,newSet, tableValuesAssign
+
+
+  -- library functions
   = _m.abs, _m.sin, _m.cos, _m.max
   , _m.atan, _m.sqrt
-  , _m.pi
-  , _m.pi * 2
+  , _m.pi, _m.pi * 2
+  -- script scope variable defs
+  , 0 -- _tokenId
 
---function names to minify
-local clamp, getN, negativeOneIf, ifVal
-,shiftBuffer, sign, newRotor, trunc2
-, trunc, getTokens, isValidNumber, numberOrZero
---, getSomeIndexValues
-
+  
 
 function ifVal(condition, ifTrue, ifFalse)
   return condition and ifTrue or ifFalse
@@ -52,6 +64,17 @@ function negativeOneIf(condition)
 end
 function isValidNumber(x,invalidValue)
   return x~=nilzies and type(x)=='number' and x~=invalidValue
+end
+function baseOneModulo(value, maxValue)
+  -- example: for an array of 30 elements, but base 1 because lua 
+  -- baseOneModulo(1,30) = 1
+  -- baseOneModulo(30,30) = 30
+  -- baseOneModulo(31,30) = 1
+  -- baseOneModulo(0,30) = 30
+  return (value - 1) % maxValue + 1
+end
+function sign(x)
+  return x>0 and 1 or x<0 and -1 or 0
 end
 
 function clamp(v,minVal,maxVal) 
@@ -63,18 +86,18 @@ function clamp(v,minVal,maxVal)
     or nilzies
 end
 
-function getN(...)
-    local r={}
-    for i,v in ipairs({...}) do r[i]=inN(v) end
-    return tableUnpack(r)
+function getInputNumbers(channelList, returnList)
+  returnList=returnList or {}
+  for i,v in ipairz(channelList) do returnList[i]=inN(v) end
+  return returnList
 end
 
 
-local _tokenId, state_boot, state_initOffset, state_waitRPS, state_hover 
-  = 0,1,2,3,4
+-- _tokenId is initialized to 0 above
 function getTokens(n, list, prefix)
-  list, prefix
-    = list or {}
+  n, list, prefix
+    = n or 1
+    , list or {}
     , prefix or "token_"
   for i=1,n do
     _tokenId = _tokenId + 1
@@ -83,29 +106,227 @@ function getTokens(n, list, prefix)
   return tableUnpack(list)
 end
 
---[[
-we're going to try local nilz to save a few bytes
--- actually, that caused me to immediately run into upvalues limit issue
-
-local t_tokenList = "tokenorwhatever"
+local t_tokenList
+  -- signal functions
+  , f_sAssignValues, f_sGetValues, f_sNewSignalSet, f_sAdvanceBuffer
+  -- signal elements
+  , t_Value, t_Velocity, t_Accel
+  , t_targetValue, t_targetVel, t_targetAccel
+  , t_buffers
+  -- process functions
+  , f_pRun
+  = getTokens(13)
 
 function newSet(tokenCount, set)
+  -- Calling with an exisiting set will increase the token count
   set = set or {}
-  set[t_tokenList] = getTokens(tokenCount, set[t_tokenList])
+  set[t_tokenList] = {getTokens(tokenCount, set[t_tokenList])}
+  return set
 end
-fruitSet = newSet(6)
-fruitSet = {token1 = nil, token2 = nil, etc, token6 = nil}
-local orange, banana, apple, cherry, melon, lemon = getTokens(fruitSet)
+function tableValuesAssign(container, indexList, values)
+  for i,v in ipairz(indexList) do
+    container[v] = values[i]
+  end
+end
 
+--[[
+fruitSet = newSet(6)
+local orange, banana, apple, cherry, melon, lemon = getTokens(fruitSet)
+fruitSet[orange] = "juice fruit"
+fruitSet[apple] = "pie fruit"
+tableValuesAssign(fruitSet, 
+  {banana, cherry, melon, lemon}, 
+  {""})
 --]]
 
 
 
-local altBuff, velBuff, accBuff, tgVelBuff, tgAccBuff
-, _pitch, _accErr
- = getTokens(7)
- --"altBuff", "velBuff", "accBuff", "tgVelBuff", "tgAccBuff"
- --, "pitch", "accErr"
+local signals, signalLogic, processingLogic
+
+-- deferred definition is expanded below with
+-- processingLogic = processingLogic()
+-- but signalLogic must be expanded first
+function processingLogic()
+  local this
+    , compositeInSignalChannels
+    , compositeInSignalSet
+    , computedSignalSet
+    = {}
+    -- the 13 composite channel indices for number inputs:
+    , {
+      1,2,3,4            -- pilot inputs: roll, pitch, yaw, updown
+      ,5,6               -- pilot inputs: axis5, axis6
+      ,21,22,23,24,25,26 -- sensors: gpsX, gpxY, compass, tilt pitch, roll, up
+      ,29                -- sensor: rotor RPS
+      }
+    -- 13 number inputs are defined
+    , signalLogic[f_sNewSignalSet](13)
+    -- computed signal set (3 elements) headDrift, sideDrift, heading
+    , signalLogic[f_sNewSignalSet](2)
+
+
+    -- index tokens for all 13 compositeInSignalSet elements:
+  local t_pilotRoll, t_pilotPitch, t_pilotYaw, t_pilotUpdown
+    , t_pilotAxis5, t_pilotAxis6
+    , t_gpsX, t_gpsY, t_compass, t_tiltPitch, t_tiltRoll, t_tiltUp
+    , t_rotorRPS
+    = tableUnpack(compositeInSignalSet[t_tokenList])
+
+  local t_heading, t_sideDrift, t_headDrift
+    = tableUnpack(computedSignalSet[t_tokenList])
+    
+    -- processing.run() function:
+    this[f_pRun] = function()
+      signalLogic[f_sAssignValues](
+        compositeInSignalSet
+        ,getInputNumbers(compositeInSignalChannels)
+      )
+      -- todo: non-signal input mcTick is on channel 30
+
+      -- raw values from these signals:
+      local sTiltPitch, sTiltUp, sGpsX, sGpsY, sCompass
+        -- (and some locals to assign later)
+        , heading, velAngle, xyVel
+        , sideDrift, forwardDrift
+
+        = signalLogic[f_sGetValues](compositeInSignalSet
+        , {t_tiltPitch, t_tiltUp, t_gpsX, t_gpsY, t_compass})
+
+      -- signalLogic[f_sGetValues] = function(signalSet, signalKeys, elementKey, list)
+      -- rate of change (t_Velocity) from these signals
+      local yawRate, rollRate, pitchRate, xVel, yVel
+        = signalLogic[f_sGetValues](
+          compositeInSignalSet
+          , {t_compass, t_tiltRoll, t_tiltPitch, t_gpsX, t_gpsY}
+          , t_Velocity
+        )
+
+      -- signal value corrections:
+      if sTiltUp < 0 then
+        sTiltPitch = sTiltPitch + (0.25 * sign(sTiltUp))
+      end
+      -- wishful thinking maybe - I don't think this wrap around correction will work any more
+      if yawRate > .5 then yawRate = yawRate - 1 end
+      if yawRate < -.5 then yawRate = yawRate + 1 end
+
+      heading, velAngle, xyVel
+        = sCompass + 0.25
+        , atan2(yVel, xVel) / pi2
+        , sqrt(xVel*xVel + yVel*yVel)
+
+      sideDrift, forwardDrift--, sideAcc, headAcc
+        = sin(pi2 * (velAngle - heading)) * -xyVel
+        , cos(pi2 * (velAngle - heading)) * xyVel
+        --, sin(pi2 * (velAngle - heading)) * -xyVel
+        --, cos(pi2 * (velAngle - heading)) * xyVel
+      
+      -- corrected roll =
+      -- asin((sin(x*pi/180))/(sin((90-y)*pi/180)))*180/pi
+      -- x is the roll angle from the sensor in degrees, and y is the pitch angle from the sensor in degrees
+      -- according to jbaker from Stormworks lua discord
+
+      -- signalLogic[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
+      signalLogic[f_sAssignValues](
+        compositeInSignalSet
+        , {sPitch}, t_Value
+        , {t_tiltPitch}
+        )
+	
+  
+      outN(9, qrAlt)
+      outN(10, altTg)
+      outN(11, outPitch)
+      outN(12, outRoll)
+      outN(13, sideDrift)
+      outN(14, forwardDrift)
+      outN(15, xAcc)
+      outN(16, yAcc)
+    end
+
+  -- signals (can?) have value, velocity (value delta), acceleration (velocity delta)
+  -- targetValue, targetVelocity, targetAcceleration
+  -- errorValue, errorVelocity, errorAcceleration
+  
+  return this
+end
+
+-- deferred function creates separate scope to reduce upvalue count in other scopes
+-- expanded below using signalLogic = signalLogic()
+function signalLogic()
+  local this
+    , signalElements
+    , t_bufferPosition, t_bufferLength
+    = {}
+    , 
+    { -- signal elements
+      t_Value, t_Velocity, t_Accel
+      , t_targetValue, t_targetVel, t_targetAccel
+    }
+  this[f_sNewSignalSet] = function(signalCount, bufferLength)
+    bufferLength = bufferLength or 60
+    local signalSet, buffers, newSignal
+      = newSet(signalCount)
+    tableValuesAssign(signalSet
+      , {t_bufferLength,t_bufferPosition}
+      , {bufferLength, 1}
+      )
+    for i,v in ipairz(signalSet[t_tokenList]) do
+      newSignal, buffers={}, {}
+      for ei, element in ipairz(signalElements) do
+        buffers[element] = {}        
+        -- initialize the buffers for this signal element to complete size
+        for bi = 1,bufferLength do
+          buffers[element][bi] = nilzies
+        end
+        newSignal[element],
+        newSignal[t_buffers] 
+        = nilzies
+        , buffers
+      end
+
+      signalSet[v] = newSignal
+    end
+    return signalSet
+  end
+
+  this[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
+    elementKey, signalKeys 
+      = elementKey or t_Value
+      , signalKeys or signalSet[t_tokenList]
+    local currentIndex, signal
+      = signalSet[t_bufferPosition]
+    
+    for i,v in ipairz(signalKeys ) do 
+      signal = signalSet[v]
+      signal[elementKey] = values[i]
+      -- mock up for velocities being assigned
+      signal[t_Velocity] = values[i]
+    end
+  end
+
+  this[f_sGetValues] = function(signalSet, signalKeys, elementKey, list)
+    elementKey, list 
+      = elementKey or t_Value
+      , list or {}
+
+    for i,v in ipairz(signalKeys) do
+      list[i] = signalSet[v][elementKey]
+    end
+    return tableUnpack(list)
+  end
+
+  this[f_sAdvanceBuffer] = function(signalSet)
+    local currentIndex = signalSet[t_bufferPosition] or 0
+
+
+  end
+
+  return this
+end
+
+-- Actual Init for deferred logic definitions
+signalLogic = signalLogic()
+processingLogic = processingLogic()
 
 function newRotor()
   local rotor = {
@@ -154,88 +375,9 @@ function onTick()
 end
 --]]
 
-local luaTick, lastTick, state, forwardPitch, qr, 
-  altTg, bufferWidth, bufferHead, bufferDeltaPerSecond =
-  0, -- luaTick=
-  -1, -- lastTick=
-  state_boot, -- state=
-  0 -- forwardPitch=
-  --qr=
-  ,{newRotor(),newRotor(),newRotor(),newRotor()}
-
-bufferWidth = 5
-bufferHead = bufferWidth+1
-bufferDeltaPerSecond = 60 / bufferWidth
-local buffers
-  , bfRoll, bfPitch, bfYaw
-  , bfTargetRoll, bfTargetPitch, bfTargetYaw
-  , bfXPos,bfYPos
-  , bfXVel,bfYVel
-  , bufferList
-  ={}
-  --,getSomeIndexValues(8)
-  ,1,2,3,4,5,6,7,8,9,10
-bufferList = {bfRoll, bfPitch, bfYaw, bfTargetRoll, bfTargetPitch, bfTargetYaw
-,bfXPos,bfYPos, bfXVel,bfYVel}
-for i,v in pairs(bufferList) do
-  buffers[v]={}
-end
-
---[[
-  have to wait for freee upvalues for these -
-local signals
-  , s_Xpos, s_Ypos, s_Heading
-  , signalList
-  = {}
-  ,1,2,3
-  , {}
-signalList = {s_Xpos, s_Ypos, s_Heading}
-
---]]
-
---[[
-signal (ex yaw) has:
-value (could be nil?)
- valueBuffer
-target (could be nil?)
- targetBuffer
-difference () nil or zero?
-
-
-]]
-
-function shiftBuffer(buffer)
-    for bufferIndex=1, bufferWidth do
-      -- Shift values forward in buffer or initialize to zero if nil
-      buffer[bufferIndex] = buffer[bufferIndex+1] or 0
-    end
-end
-
-function sign(x)
-  return x>0 and 1 or x<0 and -1 or 0
-end
-
---[[
-Moved these to onTick locals:
-pilotInputRoll,pitch,yaw,coll,axis5,axis6,
-	sX,sY,sCompass,sPitch,sRoll,sTiltUp,
-	rRPS,mcTick
-
-was
-local pilotInputRoll,pitch,yaw,coll,axis5,axis6,
-	sX,sY,sCompass,sPitch,sRoll,sTiltUp,
-	rRPS,mcTick, yawRate, rollRate, pitchRate,
-  qrAlt, throttleUp, rotorInputCount
-
-now is:
-
-local yawRate, rollRate, pitchRate,
-  qrAlt, throttleUp, rotorInputCount
-
-]]
-
-local yawRate, rollRate, pitchRate,
-  qrAlt, throttleUp, rotorInputCount
+local luaTick, lastTick
+  = 0 -- luaTick=
+  , -1 -- lastTick=
 
 function onTick()
 	if inN(1) == nilzies then return false end -- safety check
@@ -246,64 +388,13 @@ function onTick()
 	end
   --]]
 
-	local pilotInputRoll,pitch,yaw,coll,axis5,axis6,
-	sX,sY,sCompass,sPitch,sRoll,sTiltUp,
-	rRPS,mcTick=getN(1,2,3,4,5,6,21,22,23,24,25,26,29,30)
-	qrAlt,rotorInputCount=0,0
+  processingLogic[f_pRun]()
 
-  -- so...
-  throttleUp = 0 + ifVal(input_GetBool(1), 1, 0) - ifVal(input_GetBool(2), 1, 0)
-	
-  if sTiltUp<0 then
-    sPitch = sPitch + (0.25 * sign(sTiltUp))
-  end
-  -- corrected roll =
-  -- asin((sin(x*pi/180))/(sin((90-y)*pi/180)))*180/pi
-  -- x is the roll angle from the sensor in degrees, and y is the pitch angle from the sensor in degrees
-  -- according to jbaker from Stormworks lua discord
-
-  for i,v in pairs(bufferList) do
-    shiftBuffer(buffers[v])
-  end
-  buffers[bfYaw][bufferHead] = sCompass
-  buffers[bfRoll][bufferHead] = sRoll
-  buffers[bfPitch][bufferHead] = sPitch
-  buffers[bfXPos][bufferHead] = sX
-  buffers[bfYPos][bufferHead] = sY
-  yawRate = sCompass - buffers[bfYaw][1]
-  rollRate = (sRoll - buffers[bfRoll][1]) * bufferDeltaPerSecond
-  pitchRate = (sPitch - buffers[bfYaw][1]) * bufferDeltaPerSecond
-  if yawRate > .5 then yawRate = yawRate - 1 end
-  if yawRate < -.5 then yawRate = yawRate + 1 end
-  yawRate = yawRate * bufferDeltaPerSecond
-
-  local xVel, yVel, heading
-    , xAcc, yAcc
-    , velAngle, xyVel
-    , sideDrift, headDrift, sideAcc, headAcc
-   -- xVel
-   = (buffers[bfXPos][bufferHead] - buffers[bfXPos][1]) * bufferDeltaPerSecond
-   -- yVel = 
-   , (buffers[bfYPos][bufferHead] - buffers[bfYPos][1]) * bufferDeltaPerSecond
-   -- heading = 
-   , buffers[bfYaw][1] + 0.25
+end
 
 
-  buffers[bfXVel][bufferHead] = xVel
-  buffers[bfYVel][bufferHead] = yVel
-
-  velAngle, xyVel, xAcc, yAcc
-  = atan2(yVel, xVel) / pi2
-  , sqrt(xVel*xVel + yVel*yVel)
-  , (buffers[bfXVel][1] - xVel) * bufferDeltaPerSecond
-  , (buffers[bfYVel][1] - yVel) * bufferDeltaPerSecond
-
-  sideDrift, headDrift, sideAcc, headAcc
-  = sin(pi2 * (velAngle - heading)) * -xyVel
-  , cos(pi2 * (velAngle - heading)) * xyVel
-  , sin(pi2 * (velAngle - heading)) * -xyVel
-  , cos(pi2 * (velAngle - heading)) * xyVel
-
+  --[[
+  
 	for i,rotor in pairs(qr) do
 		--local r=rotor
 		local inputOffset=(i-1)*3 + 9
@@ -539,7 +630,9 @@ function onTick()
         yp = yaw * negativeOneIf(i==2 or i==4)
         newPitch = newPitch + yp
       end
-      
+      --]]
+
+
       --[[
         I tried the usual way of quad rotor yaw of increasing torque in two opposite corners, but it was not very effective or consistent when tested in game
 
@@ -559,7 +652,7 @@ function onTick()
       newPitch = newPitch + yawTwist * tiltYawTaper
 
       --]]
-
+      --[[
 
 			pitchChange = clamp(newPitch - rotor[_pitch], -0.2, 0.2) 
 			rotor[_pitch] = rotor[_pitch] + pitchChange
@@ -593,17 +686,9 @@ function onTick()
 		outN(i,rotor[_pitch])
 		outN(i+4,rotor.rot)
 	end
+  --]]
 	
-	outN(9, qrAlt)
-	outN(10, altTg)
-  outN(11, outPitch)
-  outN(12, outRoll)
-  outN(13, sideDrift)
-  outN(14, headDrift)
-  outN(15, xAcc)
-  outN(16, yAcc)
-end
-
+  
 --[[
 function trunc(n) if n==nil then return "nil" end return string.format("%.f", n) end
 function trunc2(n) if n==nil then return "nil" end return string.format("%.2f", n) end
