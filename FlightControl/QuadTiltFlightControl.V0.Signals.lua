@@ -2,7 +2,7 @@
 -- Signals Refactor
 -- VS 0.S11.22a Michael McHenry 2020-10-10
 -- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
-sourceVS1122a="https://repl.it/@mgmchenry/Stormworks"
+sourceVS1122b="https://repl.it/@mgmchenry/Stormworks"
 
 -- I have this idea for putting string constant values in a text property so further cut down on code size
 --local strings = "test,test2,test3"
@@ -34,17 +34,21 @@ local
   , pi, pi2
   -- script scope variables with static defined starting value
   , _tokenId
+  , ticksPerSecond
   -- script scope function names to minify
+
   , ifVal
   , negativeOneIf
   , isValidNumber
   , baseOneModulo
+  , moduloCorrect
   , sign
   , clamp
   , getInputNumbers
   , getTokens
 
-  ,newSet, tableValuesAssign
+  , newSet
+  , tableValuesAssign
 
 
   -- library functions
@@ -53,6 +57,7 @@ local
   , _m.pi, _m.pi * 2
   -- script scope variable defs
   , 0 -- _tokenId
+  , 60 -- ticksPerSecond
 
   
 
@@ -63,7 +68,7 @@ function negativeOneIf(condition)
   return condition and -1 or 1
 end
 function isValidNumber(x,invalidValue)
-  return x~=nilzies and type(x)=='number' and x~=invalidValue
+  return x~=nilzies and tonumber(x)==x and x~=invalidValue
 end
 function baseOneModulo(value, maxValue)
   -- example: for an array of 30 elements, but base 1 because lua 
@@ -72,6 +77,14 @@ function baseOneModulo(value, maxValue)
   -- baseOneModulo(31,30) = 1
   -- baseOneModulo(0,30) = 30
   return (value - 1) % maxValue + 1
+end
+function moduloCorrect(value, period, offset)
+  if period then
+    offset = offset or 0
+    return (value + offset) % period - offset
+  else
+    return value
+  end
 end
 function sign(x)
   return x>0 and 1 or x<0 and -1 or 0
@@ -108,14 +121,14 @@ end
 
 local t_tokenList
   -- signal functions
-  , f_sAssignValues, f_sGetValues, f_sNewSignalSet, f_sAdvanceBuffer
+  , f_sAssignValues, f_sGetValues, f_sNewSignalSet, f_sAdvanceBuffer, f_sGetSmoothedValue
   -- signal elements
   , t_Value, t_Velocity, t_Accel
   , t_targetValue, t_targetVel, t_targetAccel
-  , t_buffers
+  , t_buffers, t_modPeriod, t_modOffset
   -- process functions
   , f_pRun
-  = getTokens(13)
+  = getTokens(16)
 
 function newSet(tokenCount, set)
   -- Calling with an exisiting set will increase the token count
@@ -124,24 +137,32 @@ function newSet(tokenCount, set)
   return set
 end
 function tableValuesAssign(container, indexList, values)
+  container = container or {}
   for i,v in ipairz(indexList) do
     container[v] = values[i]
   end
+  return container
 end
 
 --[[
-fruitSet = newSet(6)
-local orange, banana, apple, cherry, melon, lemon = getTokens(fruitSet)
-fruitSet[orange] = "juice fruit"
-fruitSet[apple] = "pie fruit"
+local fruitSet = newSet(6)
+local t_orange, t_banana, t_apple, t_cherry, t_melon, t_lemon = tableUnpack(fruitSet[t_tokenList])
+fruitSet[t_orange] = "juice fruit"
+fruitSet[t_apple] = "pie fruit"
 tableValuesAssign(fruitSet, 
-  {banana, cherry, melon, lemon}, 
-  {""})
+  {t_banana, t_cherry, t_melon, t_lemon}, 
+  {"snack", "pie fruit", "picnic fruit", "too sour fruit"})
 --]]
 
 
 
 local signals, signalLogic, processingLogic
+
+-- random thoughts...
+-- signals (can?) have value, velocity (value delta), acceleration (velocity delta)
+-- targetValue, targetVelocity, targetAcceleration
+-- errorValue, errorVelocity, errorAcceleration
+
 
 -- deferred definition is expanded below with
 -- processingLogic = processingLogic()
@@ -161,8 +182,10 @@ function processingLogic()
       }
     -- 13 number inputs are defined
     , signalLogic[f_sNewSignalSet](13)
-    -- computed signal set (3 elements) headDrift, sideDrift, heading
-    , signalLogic[f_sNewSignalSet](2)
+    -- computed signal set (5 elements) 
+    -- heading, sideDrift, forwardDrift, sideAcc, forwardAcc
+    -- and I prob don't need heading
+    , signalLogic[f_sNewSignalSet](5)
 
 
     -- index tokens for all 13 compositeInSignalSet elements:
@@ -172,86 +195,146 @@ function processingLogic()
     , t_rotorRPS
     = tableUnpack(compositeInSignalSet[t_tokenList])
 
-  local t_heading, t_sideDrift, t_headDrift
+  local t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc
     = tableUnpack(computedSignalSet[t_tokenList])
-    
-    -- processing.run() function:
-    this[f_pRun] = function()
-      signalLogic[f_sAssignValues](
-        compositeInSignalSet
-        ,getInputNumbers(compositeInSignalChannels)
-      )
-      -- todo: non-signal input mcTick is on channel 30
-
-      -- raw values from these signals:
-      local sTiltPitch, sTiltUp, sGpsX, sGpsY, sCompass
-        -- (and some locals to assign later)
-        , heading, velAngle, xyVel
-        , sideDrift, forwardDrift
-
-        = signalLogic[f_sGetValues](compositeInSignalSet
-        , {t_tiltPitch, t_tiltUp, t_gpsX, t_gpsY, t_compass})
-
-      -- signalLogic[f_sGetValues] = function(signalSet, signalKeys, elementKey, list)
-      -- rate of change (t_Velocity) from these signals
-      local yawRate, rollRate, pitchRate, xVel, yVel
-        = signalLogic[f_sGetValues](
-          compositeInSignalSet
-          , {t_compass, t_tiltRoll, t_tiltPitch, t_gpsX, t_gpsY}
-          , t_Velocity
-        )
-
-      -- signal value corrections:
-      if sTiltUp < 0 then
-        sTiltPitch = sTiltPitch + (0.25 * sign(sTiltUp))
-      end
-      -- wishful thinking maybe - I don't think this wrap around correction will work any more
-      if yawRate > .5 then yawRate = yawRate - 1 end
-      if yawRate < -.5 then yawRate = yawRate + 1 end
-
-      heading, velAngle, xyVel
-        = sCompass + 0.25
-        , atan2(yVel, xVel) / pi2
-        , sqrt(xVel*xVel + yVel*yVel)
-
-      sideDrift, forwardDrift--, sideAcc, headAcc
-        = sin(pi2 * (velAngle - heading)) * -xyVel
-        , cos(pi2 * (velAngle - heading)) * xyVel
-        --, sin(pi2 * (velAngle - heading)) * -xyVel
-        --, cos(pi2 * (velAngle - heading)) * xyVel
-      
-      -- corrected roll =
-      -- asin((sin(x*pi/180))/(sin((90-y)*pi/180)))*180/pi
-      -- x is the roll angle from the sensor in degrees, and y is the pitch angle from the sensor in degrees
-      -- according to jbaker from Stormworks lua discord
-
-      -- signalLogic[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
-      signalLogic[f_sAssignValues](
-        compositeInSignalSet
-        , {sPitch}, t_Value
-        , {t_tiltPitch}
-        )
-	
   
-      outN(9, qrAlt)
-      outN(10, altTg)
-      outN(11, outPitch)
-      outN(12, outRoll)
-      outN(13, sideDrift)
-      outN(14, forwardDrift)
-      outN(15, xAcc)
-      outN(16, yAcc)
+  -- set wrap around period and offset for compass:
+  -- tableValuesAssign(container, indexList, values)
+  tableValuesAssign(
+    compositeInSignalSet[t_compass]
+    , {t_modPeriod, t_modOffset}
+    , {1, -0.5}
+    )
+
+  -- processing.run() function:
+  this[f_pRun] = function()
+    signalLogic[f_sAssignValues](
+      compositeInSignalSet
+      ,getInputNumbers(compositeInSignalChannels)
+    )
+
+    -- todo: non-signal input mcTick is on channel 30
+
+    -- raw values from these signals:
+    local sTiltPitch, sTiltUp, sGpsX, sGpsY, sCompass
+
+      = signalLogic[f_sGetValues](compositeInSignalSet
+      , {t_tiltPitch, t_tiltUp, t_gpsX, t_gpsY, t_compass})
+
+    -- signal value corrections:
+    if sTiltUp < 0 then
+      sTiltPitch = sTiltPitch + (0.25 * sign(sTiltUp))
     end
 
-  -- signals (can?) have value, velocity (value delta), acceleration (velocity delta)
-  -- targetValue, targetVelocity, targetAcceleration
-  -- errorValue, errorVelocity, errorAcceleration
+    -- update corrected values
+    signalLogic[f_sAssignValues](
+      compositeInSignalSet
+      , {sTiltPitch}, t_Value
+      , {t_tiltPitch}
+      )
+
+    -- signalLogic[f_sGetValues] = function(signalSet, signalKeys, elementKey, list)
+    -- rate of change (t_Velocity) from these signals
+    local yawRate, rollRate, pitchRate, xVel, yVel
+      = signalLogic[f_sGetValues](
+        compositeInSignalSet
+        , {t_compass, t_tiltRoll, t_tiltPitch, t_gpsX, t_gpsY}
+        , t_Velocity
+      )
+
+      
+    local xAcc, yAcc
+      = signalLogic[f_sGetValues](
+        compositeInSignalSet
+        , {t_gpsX, t_gpsY}
+        , t_Accel
+      )
+
+
+    -- corrected roll =
+    -- asin((sin(x*pi/180))/(sin((90-y)*pi/180)))*180/pi
+    -- x is the roll angle from the sensor in degrees, and y is the pitch angle from the sensor in degrees
+    -- according to jbaker from Stormworks lua discord
+    
+    local heading
+      , velAngle
+      , xyVel
+      , accAngle
+      , xyAcc
+
+      , sideDrift, forwardDrift
+      , sideAcc, forwardAcc
+
+      = sCompass + 0.25
+      , atan2(yVel, xVel) / pi2 -- velAngle
+      , sqrt(xVel*xVel + yVel*yVel) --xyVel
+      , atan2(yAcc, xAcc) / pi2 -- accAngle
+      , sqrt(xAcc*xAcc + yAcc*yAcc) --xyAcc
+
+    sideDrift, forwardDrift, sideAcc, forwardAcc
+      = sin(pi2 * (velAngle - heading)) * -xyVel
+      , cos(pi2 * (accAngle - heading)) * xyAcc
+    
+
+    -- signalLogic[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
+    signalLogic[f_sAssignValues](
+      computedSignalSet
+      , {sideDrift, forwardDrift, sideAcc, forwardAcc}, t_Value
+      , {t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc}
+      )
+
+    outN(13, sideDrift)
+    outN(14, forwardDrift)
+    outN(15, sideAcc)
+    outN(16, forwardAcc)
+    outN(17, sCompass)    
+    outN(18, heading)
+    outN(19, yawRate)
+
+    --[[
+    outN(9, qrAlt)
+    outN(10, altTg)
+    outN(11, outPitch)
+    outN(12, outRoll)
+    --]]
+
+    signalLogic[f_sAdvanceBuffer](compositeInSignalSet)
+    signalLogic[f_sAdvanceBuffer](computedSignalSet)
+  end
+
   
   return this
 end
 
 -- deferred function creates separate scope to reduce upvalue count in other scopes
 -- expanded below using signalLogic = signalLogic()
+--[[
+signal Set structure:
+signalSet = {
+  t_tokenList = {yaw, pitch, roll, whatever}
+  , t_bufferLength = 60ish
+  , t_bufferPosition = 1
+  -- signals have a value element and derived elements like rate of change. I might include the element list in the signalSet in the future
+  , t_signalElements? = {value, velocity, acceleration, etc?}
+  -- the signal set table contains a signal table entry for each signal key from t_tokenList
+  , yaw = {
+    -- each signal table contains a value entry for each "signal element type"
+    t_Value= 0.2
+    , t_Velocity = 0.1
+    , t_Accel = 0.01
+    , etc reminaing elements of signal
+    -- the signal table contains a buffer container table
+    , t_buffers = {
+      -- the buffer container table contains a rolling history  of t_bufferLength values for each signal element
+      t_Velocity = {1,2,3..bufferLength}
+      , t_Accel = {1,2,3..bufferLength}
+      , etc remaining elements of signal      
+    }
+  }
+  , pitch {etc other signals from tokenList}
+}
+
+--]]
 function signalLogic()
   local this
     , signalElements
@@ -262,45 +345,109 @@ function signalLogic()
       t_Value, t_Velocity, t_Accel
       , t_targetValue, t_targetVel, t_targetAccel
     }
+    , getTokens(2)
+
+  -- constructor for new signalSet  
   this[f_sNewSignalSet] = function(signalCount, bufferLength)
     bufferLength = bufferLength or 60
-    local signalSet, buffers, newSignal
+    local signalSet, newBuffers, newSignal
       = newSet(signalCount)
     tableValuesAssign(signalSet
       , {t_bufferLength,t_bufferPosition}
       , {bufferLength, 1}
       )
-    for i,v in ipairz(signalSet[t_tokenList]) do
-      newSignal, buffers={}, {}
+
+    for i,signalName in ipairz(signalSet[t_tokenList]) do
+      newSignal, newBuffers
+        = {}, {}     
+
+      -- stick the new signal and buffers where they go
+      signalSet[signalName]
+        , newSignal[t_buffers]
+
+        = newSignal
+        , newBuffers
+
       for ei, element in ipairz(signalElements) do
-        buffers[element] = {}        
+        newSignal[element] = nilzies
+        newBuffers[element] = {}
         -- initialize the buffers for this signal element to complete size
         for bi = 1,bufferLength do
-          buffers[element][bi] = nilzies
+          newBuffers[element][bi] = nilzies
         end
-        newSignal[element],
-        newSignal[t_buffers] 
-        = nilzies
-        , buffers
       end
 
-      signalSet[v] = newSignal
     end
     return signalSet
   end
 
+  this[f_sAdvanceBuffer] = function(signalSet)
+    local currentIndex
+      , signal
+      
+      = baseOneModulo(signalSet[t_bufferPosition] + 1, signalSet[t_bufferLength])
+
+    signalSet[t_bufferPosition] = currentIndex
+    
+    for i,signalName in ipairz(signalSet[t_tokenList]) do
+      signal = signalSet[signalName]
+      -- let's clear buffer values at this position
+      for ei, element in ipairz(signalElements) do
+        signal[t_buffers][element][currentIndex] = nilzies
+      end
+    end
+  end
+
+  -- multiple assign values list to elements of list of signal signalKeys
+  -- defaults if nil/omitted:
+  -- elementKey = t_Value
+  -- signalKeys list is all signals in the set (t_tokenList)
+  -- propogates derived values (velocity from value, acceleration from velocity)
   this[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
     elementKey, signalKeys 
       = elementKey or t_Value
       , signalKeys or signalSet[t_tokenList]
-    local currentIndex, signal
+
+    for i,signalKey in ipairz(signalKeys) do 
+      local bufferPosition
+        , signal
+        , cascadeMap
+        , valueBuffer
+        , cascadeElement
+        , currentValue, previousValue, delta
+
       = signalSet[t_bufferPosition]
-    
-    for i,v in ipairz(signalKeys ) do 
-      signal = signalSet[v]
-      signal[elementKey] = values[i]
-      -- mock up for velocities being assigned
-      signal[t_Velocity] = values[i]
+        , signalSet[signalKey]
+        -- cascadeMap contruction - value delta is velocity. velocity delta is accel
+        , tableValuesAssign(nilzies, {t_Value, t_Velocity}, {t_Velocity, t_Accel})
+      
+      valueBuffer = signal[t_buffers] -- firt get buffer container for this signal
+      valueBuffer = valueBuffer[elementKey] -- inside, buffer for this element
+
+      currentValue = moduloCorrect(values[i],signal[t_modPeriod],signal[t_modOffset])
+
+      signal[elementKey] = currentValue
+      valueBuffer[bufferPosition] = currentValue
+      cascadeElement = cascadeMap[elementKey]
+
+      if cascadeElement then
+        -- def: this[f_sGetSmoothedValue] = function(signalSet, signalKey, elementKey, smoothTicks, delayTicks)
+        currentValue = this[f_sGetSmoothedValue](signalSet, signalKey, elementKey, 3)
+        -- smoothed over 3 ticks should be decent
+        previousValue = this[f_sGetSmoothedValue](signalSet, signalKey, elementKey, 3, 1)
+
+        delta = moduloCorrect(
+          currentValue - previousValue
+          ,signal[t_modPeriod],signal[t_modOffset]
+          ) / ticksPerSecond
+
+        --signal[cascadeElement] = delta
+        -- ^ doesn't cut it because velocity won't cascade to accel that way
+        -- so:
+        -- def: this[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
+        this[f_sAssignValues](signalSet, {delta}, cascadeElement, {signalKey})
+        
+      end
     end
   end
 
@@ -315,10 +462,54 @@ function signalLogic()
     return tableUnpack(list)
   end
 
-  this[f_sAdvanceBuffer] = function(signalSet)
-    local currentIndex = signalSet[t_bufferPosition] or 0
+  this[f_sGetSmoothedValue] = function(signalSet, signalKey, elementKey, smoothTicks, delayTicks)
+    elementKey
+      , smoothTicks
+      , delayTicks 
 
+      = elementKey or t_Value
+      , smoothTicks or 3
+      , delayTicks or 0
+    
+    local currentIndex
+      , bufferLength
+      , signal
+      , diffSum
 
+      , valueBuffer
+      , sample
+      , sampleIndex
+      , baseValue
+
+      = signalSet[t_bufferPosition]
+      , signalSet[t_bufferLength]
+      -- should be: signalSet[signalKey][t_buffers][elementKey]
+      , signalSet[signalKey] --[t_buffers][elementKey]
+      -- but split the value buffer retrieval into discrete steps for debugging purposes for now
+      , 0 -- avg default. nil values will coalesce to 0
+
+    -- valueBuffer = signalSet[signalKey][t_buffers][elementKey]:
+    valueBuffer = signal[t_buffers][elementKey]
+
+    -- no more delay ticks than we have on hand. Leave room for one sample. minimum 0
+    delayTicks = clamp(delayTicks, 0, bufferLength - 1)
+    -- make sure we get at least 1 tick, but no more ticks than the buffer contains or wrapping back to current
+    smoothTicks = clamp(smoothTicks, 1, bufferLength - delayTicks)
+    
+    for i = 0, smoothTicks - 1 do
+      sampleIndex = baseOneModulo(currentIndex - delayTicks - i , bufferLength)
+      sample = valueBuffer[sampleIndex]
+      baseValue = baseValue or sample
+      diffSum = diffSum + (
+        isValidNumber(sample) and 
+        moduloCorrect(sample - baseValue
+          ,signal[t_modPeriod],signal[t_modOffset])
+        or 0)
+    end
+    return 
+    moduloCorrect(
+      diffSum / smoothTicks + (baseValue or 0)
+      ,signal[t_modPeriod],signal[t_modOffset])
   end
 
   return this
