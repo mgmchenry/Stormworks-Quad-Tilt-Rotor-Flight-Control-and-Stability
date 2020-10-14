@@ -2,7 +2,7 @@
 -- Signals Refactor
 -- VS 0.S11.22a Michael McHenry 2020-10-10
 -- 0.6.09 min: Before 11,170 bytes After 4,052 bytes
-sourceVS1122b="https://repl.it/@mgmchenry/Stormworks"
+sourceVS1122c="https://repl.it/@mgmchenry/Stormworks"
 
 -- I have this idea for putting string constant values in a text property so further cut down on code size
 --local strings = "test,test2,test3"
@@ -81,7 +81,7 @@ end
 function moduloCorrect(value, period, offset)
   if period then
     offset = offset or 0
-    return (value + offset) % period - offset
+    return (value - offset) % period + offset
   else
     return value
   end
@@ -130,10 +130,10 @@ local t_tokenList
   , f_pRun
   = getTokens(16)
 
-function newSet(tokenCount, set)
+function newSet(tokenCount, set, tokenList)
   -- Calling with an exisiting set will increase the token count
   set = set or {}
-  set[t_tokenList] = {getTokens(tokenCount, set[t_tokenList])}
+  set[t_tokenList] = tokenList or {getTokens(tokenCount, set[t_tokenList])}
   return set
 end
 function tableValuesAssign(container, indexList, values)
@@ -156,13 +156,40 @@ tableValuesAssign(fruitSet,
 
 
 
-local signals, signalLogic, processingLogic
+local signals, signalLogic, processingLogic, rotorLogic
 
 -- random thoughts...
 -- signals (can?) have value, velocity (value delta), acceleration (velocity delta)
 -- targetValue, targetVelocity, targetAcceleration
 -- errorValue, errorVelocity, errorAcceleration
 
+--[[
+function rotorLogic()
+  local this
+    
+
+function newRotor()
+  local rotor = {
+    ofs=nilzies,
+    alt=0,
+    tilt=0,
+    vel=0,
+    rot=0,
+    pC=nilzies,pP=0,pR=0
+  }
+  rotor[_accErr] = nilzies
+  rotor[_pitch] = 0.25
+  rotor[altBuff] = {}
+  rotor[velBuff] = {}
+  rotor[accBuff] = {}
+  rotor[tgVelBuff] = {}
+  rotor[tgAccBuff] = {}
+  return rotor
+end
+
+  return this
+end
+--]]
 
 -- deferred definition is expanded below with
 -- processingLogic = processingLogic()
@@ -172,6 +199,8 @@ function processingLogic()
     , compositeInSignalChannels
     , compositeInSignalSet
     , computedSignalSet
+    , rotors
+    , rotorSignalNames
     = {}
     -- the 13 composite channel indices for number inputs:
     , {
@@ -186,7 +215,18 @@ function processingLogic()
     -- heading, sideDrift, forwardDrift, sideAcc, forwardAcc
     -- and I prob don't need heading
     , signalLogic[f_sNewSignalSet](5)
+    -- rotors
+    , {}
+    -- rotor signal names (thrust, alt, tilt)
+    , {getTokens(3)}
 
+  -- rotor signals
+  local 
+    t_rAlt, t_rTiltPitch, t_rThrust
+    -- and some functions
+    , runRotorLogic
+
+    = tableUnpack(rotorSignalNames)
 
     -- index tokens for all 13 compositeInSignalSet elements:
   local t_pilotRoll, t_pilotPitch, t_pilotYaw, t_pilotUpdown
@@ -205,6 +245,52 @@ function processingLogic()
     , {t_modPeriod, t_modOffset}
     , {1, -0.5}
     )
+
+  
+  for i=1,4 do
+    -- def: signalLogic[f_sNewSignalSet] = function(signalCount, bufferLength, tokenList)
+    rotors[i]
+      = signalLogic[f_sNewSignalSet](#rotorSignalNames, nilzies, rotorSignalNames)
+
+  end
+
+  function runRotorLogic(inputOffset)
+    for i=1,4 do
+      --[[
+      inputOffset =(i-1)*3 + 9
+      {inputOffset, inputOffset+1, inputOffset+2}
+      i*3+6
+      
+    t_rAlt, t_rTiltPitch, t_rThrust
+      --]]
+      inputOffset = i*3+6
+        
+      local rotorSignalSet
+        , rotorInputChannels
+      -- rotor sensors: rotor.alt, rotor.tilt, rotor.vel
+        = rotors[i]
+        , {inputOffset, inputOffset+1, inputOffset+2}
+
+      signalLogic[f_sAssignValues](
+        rotorSignalSet
+        ,getInputNumbers(rotorInputChannels)
+      )
+
+      -- todo: non-signal input mcTick is on channel 30
+
+      -- raw values from these signals:
+      local rAlt, rTilt, rVelocity
+
+        = signalLogic[f_sGetValues](rotorSignalSet
+        , rotorSignalNames)
+
+
+      
+    signalLogic[f_sAdvanceBuffer](rotorSignalSet)
+
+    end
+
+  end
 
   -- processing.run() function:
   this[f_pRun] = function()
@@ -271,8 +357,15 @@ function processingLogic()
       , atan2(yAcc, xAcc) / pi2 -- accAngle
       , sqrt(xAcc*xAcc + yAcc*yAcc) --xyAcc
 
+    --[[ from flightvis    
+    sideDrift = sin(pi2 * (velAngle - polarOffset)) * -xyVel
+    headDrift = cos(pi2 * (velAngle - polarOffset)) * xyVel 
+    --]]
+
     sideDrift, forwardDrift, sideAcc, forwardAcc
       = sin(pi2 * (velAngle - heading)) * -xyVel
+      , cos(pi2 * (velAngle - heading)) * xyVel
+      , sin(pi2 * (accAngle - heading)) * -xyAcc
       , cos(pi2 * (accAngle - heading)) * xyAcc
     
 
@@ -283,13 +376,21 @@ function processingLogic()
       , {t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc}
       )
 
-    outN(13, sideDrift)
-    outN(14, forwardDrift)
-    outN(15, sideAcc)
-    outN(16, forwardAcc)
-    outN(17, sCompass)    
-    outN(18, heading)
-    outN(19, yawRate)
+    runRotorLogic()
+
+    local outVars = {
+      sGpsX, xVel, xAcc
+      , sGpsY, yVel, yAcc
+      , xyVel, xyAcc --7,8
+      , sCompass, heading, yawRate -- 9,10,11
+      , 60277 --12
+      , sideDrift, forwardDrift
+      , sideAcc, forwardAcc
+      }
+
+    for i=1, #outVars do      
+      outN(i, tonumber( string.format("%.4f", outVars[i]) ))
+    end
 
     --[[
     outN(9, qrAlt)
@@ -348,10 +449,10 @@ function signalLogic()
     , getTokens(2)
 
   -- constructor for new signalSet  
-  this[f_sNewSignalSet] = function(signalCount, bufferLength)
+  this[f_sNewSignalSet] = function(signalCount, bufferLength, tokenList)
     bufferLength = bufferLength or 60
     local signalSet, newBuffers, newSignal
-      = newSet(signalCount)
+      = newSet(signalCount, nilzies, tokenList)
     tableValuesAssign(signalSet
       , {t_bufferLength,t_bufferPosition}
       , {bufferLength, 1}
@@ -439,7 +540,7 @@ function signalLogic()
         delta = moduloCorrect(
           currentValue - previousValue
           ,signal[t_modPeriod],signal[t_modOffset]
-          ) / ticksPerSecond
+          ) * ticksPerSecond
 
         --signal[cascadeElement] = delta
         -- ^ doesn't cut it because velocity won't cascade to accel that way
@@ -517,26 +618,8 @@ end
 
 -- Actual Init for deferred logic definitions
 signalLogic = signalLogic()
+--rotorLogic = rotorLogic()
 processingLogic = processingLogic()
-
-function newRotor()
-  local rotor = {
-    ofs=nilzies,
-    alt=0,
-    tilt=0,
-    vel=0,
-    rot=0,
-    pC=nilzies,pP=0,pR=0
-  }
-  rotor[_accErr] = nilzies
-  rotor[_pitch] = 0.25
-  rotor[altBuff] = {}
-  rotor[velBuff] = {}
-  rotor[accBuff] = {}
-  rotor[tgVelBuff] = {}
-  rotor[tgAccBuff] = {}
-  return rotor
-end
 
 -- Tajin pid code
 function pid(p,i,d)
