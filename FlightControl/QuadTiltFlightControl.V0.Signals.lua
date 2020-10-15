@@ -1,7 +1,8 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
 -- Signals Refactor
--- VS 0.S11.22d Michael McHenry 2020-10-15
+-- VS 0.S11.22e Michael McHenry 2020-10-15
 -- Minifies to 3988 characters as of S11.22d
+-- Minifies to 3807 characters as of S11.22e
 sourceVS1122d="https://repl.it/@mgmchenry/Stormworks"
 
 -- I have this idea for putting string constant values in a text property so further cut down on code size
@@ -47,7 +48,7 @@ local
   , getInputNumbers
   , getTokens
 
-  , newSet
+  --, newSet
   , tableValuesAssign
 
 
@@ -131,12 +132,14 @@ local t_tokenList
   , f_pRun
   = getTokens(18)
 
+--[[
 function newSet(tokenCount, set, tokenList)
   -- Calling with an exisiting set will increase the token count
   set = set or {}
   set[t_tokenList] = tokenList and {tableUnpack(tokenList)} or {getTokens(tokenCount, set[t_tokenList])}
   return set
 end
+--]]
 function tableValuesAssign(container, indexList, values)
   container = container or {}
   for i,v in ipairz(indexList) do
@@ -245,11 +248,11 @@ function processingLogic()
 
   
   for i=1,4 do
-    -- def: signalLogic[f_sNewSignalSet] = function(signalCount, bufferLength, tokenList)
+    -- def: signalLogic[f_sNewSignalSet] = function(newSignalNames, newSignalElements, signalSet, bufferLength)
     rotors[i]
-      = signalLogic[f_sNewSignalSet](#rotorSignalNames, nilzies, rotorSignalNames)
-    -- def: signalLogic[f_sAddSignals] = function(signalSet, newSignalNames, newSignalElements)
-    signalLogic[f_sAddSignals](rotors[i], rotorOutputNames, {t_OutValue})
+      = signalLogic[f_sNewSignalSet](rotorSignalNames)
+    -- def: signalLogic[f_sNewSignalSet] = function(newSignalNames, newSignalElements, signalSet, bufferLength)
+    signalLogic[f_sNewSignalSet](rotorOutputNames, {t_OutValue}, rotors[i])
   end
 
   function runRotorLogic(targetClimbAcc)
@@ -488,6 +491,7 @@ function signalLogic()
     }
     , getTokens(3)
 
+  --[[
   -- constructor for new signalSet  
   this[f_sNewSignalSet] = function(signalCount, bufferLength, tokenList)
     bufferLength = bufferLength or 60
@@ -521,37 +525,61 @@ function signalLogic()
     end
     return signalSet
   end
+  --]]
 
-  this[f_sAddSignals] = function(signalSet, newSignalNames, newSignalElements)
-    local bufferLength
-      , setSignalNames
-      , newBuffers, newSignal
-      = signalSet[t_bufferLength]
+  --old:
+  --this[f_sAddSignals] = function(signalSet, newSignalNames, newSignalElements)
+  --this[f_sNewSignalSet] = function(signalCount, bufferLength, tokenList)
+  --new:
+  -- function(signalCount) -or-
+  -- function(newSignalNames, newSignalElements, signalSet, bufferLength)
+  this[f_sNewSignalSet] = function(newSignalNames, newSignalElements, signalSet, bufferLength, l_NewSet, l_SetTokenList, l_newBuffers, l_newSignal)
+
+    newSignalNames
+      , newSignalElements
+      , l_NewSet
+
+    = isValidNumber(newSignalNames) and {getTokens(newSignalNames)} or newSignalNames
+      -- elements could be a number and should be replaced with nil
+      , newSignalElements or defaultSignalElements
+      , tableValuesAssign(nilzies
+          , {t_tokenList, t_bufferLength, t_bufferPosition}
+          , {{}, bufferLength or 60, 1}
+        )
+
+    signalSet = signalSet or l_NewSet
+
+    bufferLength
+      , localSetTokenList
+    = signalSet[t_bufferLength]
       , signalSet[t_tokenList]
 
     for i,signalName in ipairz(newSignalNames) do
-      setSignalNames[#setSignalNames+1] = signalName
-      newSignal, newBuffers
-        = {}, {}     
+      localSetTokenList[#localSetTokenList+1] = signalName
+
+      l_newSignal, l_newBuffers
+      = {}, {}     
 
       -- stick the new signal and buffers where they go
       signalSet[signalName]
-        , newSignal[t_signalElements]
-        , newSignal[t_buffers]
+        , l_newSignal[t_signalElements]
+        , l_newSignal[t_buffers]
 
-        = newSignal
+      = l_newSignal
         , newSignalElements
-        , newBuffers
+        , l_newBuffers
 
       for ei, element in ipairz(newSignalElements) do
-        newSignal[element] = nilzies
-        newBuffers[element] = {}
+        l_newSignal[element] = nilzies
+        l_newBuffers[element] = {}
         -- initialize the buffers for this signal element to complete size
         for bi = 1,bufferLength do
-          newBuffers[element][bi] = nilzies
+          l_newBuffers[element][bi] = nilzies
         end
       end
     end
+
+    return signalSet
   end
 
   this[f_sAdvanceBuffer] = function(signalSet)
