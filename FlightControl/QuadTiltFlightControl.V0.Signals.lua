@@ -2,7 +2,7 @@
 -- Signals Refactor
 -- VS 0.S11.22e Michael McHenry 2020-10-15
 -- Minifies to 3988 characters as of S11.22d
--- Minifies to 3807 characters as of S11.22e
+-- Minifies to 3762 characters as of S11.22e
 sourceVS1122d="https://repl.it/@mgmchenry/Stormworks"
 
 -- I have this idea for putting string constant values in a text property so further cut down on code size
@@ -280,6 +280,13 @@ function processingLogic()
         , rotorOutputNames
       )
 
+      -- *****
+
+      
+
+
+
+      -- *****
 
 
       outN(i,roRotorPitchOut)
@@ -550,12 +557,12 @@ function signalLogic()
     signalSet = signalSet or l_NewSet
 
     bufferLength
-      , localSetTokenList
+      , l_SetTokenList
     = signalSet[t_bufferLength]
       , signalSet[t_tokenList]
 
     for i,signalName in ipairz(newSignalNames) do
-      localSetTokenList[#localSetTokenList+1] = signalName
+      l_SetTokenList[#l_SetTokenList+1] = signalName
 
       l_newSignal, l_newBuffers
       = {}, {}     
