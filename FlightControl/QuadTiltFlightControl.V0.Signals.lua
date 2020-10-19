@@ -3,13 +3,8 @@
 -- VS 0.S11.22e Michael McHenry 2020-10-15
 -- Minifies to 3988 characters as of S11.22d
 -- Minifies to 3762 characters as of S11.22e
-sourceVS1122e="https://repl.it/@mgmchenry/Stormworks"
-
--- I have this idea for putting string constant values in a text property so further cut down on code size
---local strings = "test,test2,test3"
---for i in string.gmatch(strings, "([^,]*),") do
---   print(i)
---end
+-- Minifies to 4102 characters as of S11.23a
+sourceVS1123a="repl.it/@mgmchenry"
 
 local G, prop_getText, gmatch, unpack
   , commaDelimited
@@ -50,49 +45,21 @@ end
 propValues["Ark0"] =
 [[
 string,math,input,output,property
-,tostring,ipairs,pairs
+,tostring,tonumber,ipairs,pairs
 ,input.getNumber,input.getBool,output.setNumber
 ,math.abs,math.sin,math.cos,math.max,math.atan,math.sqrt,math.floor,math.pi
 ]] 
 --] ]
 local _string, _math, _input, _output, _property
-  , _tostring, ipairz, pairz
+  , _tostring, _tonumber, ipairz, pairz
   , in_getNumber, in_getBool, out_setNumber
   , abs, sin, cos, mathmax, atan2, sqrt, floor, pi
 	= getTableValues(G,gmatch(prop_getText("Ark0"), commaDelimited))
 
 -- sanity check that the function set loaded properly. Die on pi() if not
-_ = floor(pi)~=3 and pi()
--- shorther:
+--_ = floor(pi)~=3 and pi()
+-- shorter:
 _tostring(floor(pi))
-
-
-
-local 
-  -- library function names to minify
-  pi2
-  -- script scope variables with static defined starting value
-  , _tokenId
-  , ticksPerSecond
-  -- script scope function names to minify
-
-  , ifVal
-  , negativeOneIf
-  , isValidNumber
-  , moduloCorrect
-  , sign
-  , clamp
-  , getInputNumbers
-  , getTokens
-
-  --, newSet
-  , tableValuesAssign
-
-  -- library functions
-  = pi * 2
-  -- script scope variable defs
-  , 0 -- _tokenId
-  , 60 -- ticksPerSecond
 
 local
   pi2
@@ -341,6 +308,7 @@ function processingLogic()
         , rotorInputChannels
         -- rotor sensors: rotor.alt, rotor.tilt, rotor.vel
         , roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt
+        , climbThrustAdjust
         = rotors[i]
         , {i*3+6, i*3+7, i*3+8}
 
@@ -358,9 +326,8 @@ function processingLogic()
       roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt
         = getSValues(rotorSignalSet, rotorOutputNames, t_OutValue)
 
-      roTargetAcc, rAcc 
-        = targetClimbAcc
-        , getSValues(rotorSignalSet, {t_rThrust}, t_Velocity)
+      rAcc 
+        = getSValues(rotorSignalSet, {t_rThrust}, t_Velocity)
 
       --[[
       rotorAngle = rotor.tilt * pi * 2
@@ -391,6 +358,8 @@ function processingLogic()
           --)
           or 1
         )
+      
+      roTargetAcc = targetClimbAcc * climbThrustAdjust
 
       roRotorPitchOut = clamp((roRotorPitchOut or 0) + (roTargetAcc - rAcc) / 2 / ticksPerSecond, -1, 1)
 

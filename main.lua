@@ -13,7 +13,7 @@ propValues["BaseIndex"] = 1
 propValues["Ark0"] =
 [[
 string,math,input,output,property
-,tostring,ipairs,pairs
+,tostring,tonumber,ipairs,pairs
 ,input.getNumber,input.getBool,output.setNumber
 ,math.abs,math.sin,math.cos,math.max,math.atan,math.sqrt,math.floor,math.pi
 ]] 
