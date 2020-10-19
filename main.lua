@@ -10,11 +10,19 @@ dofile("Stormworks_Stub.lua")
 
 
 propValues["BaseIndex"] = 1
+propValues["Ark0"] =
+[[
+string,math,input,output,property
+,tostring,ipairs,pairs
+,input.getNumber,input.getBool,output.setNumber
+,math.abs,math.sin,math.cos,math.max,math.atan,math.sqrt,math.floor,math.pi
+]] 
 --dofile("QuadFlightControl.V0.07.15.lua")
 --dofile("ScaleController.V2.lua")
 --dofile("QuadFlightControl.V0.09.18.lua")
 --dofile("FlightControl/QuadTiltFlightControl.V0.Dev.lua")
-dofile("FlightControl/QuadTiltFlightControl.V0.Signals.lua")
+--dofile("FlightControl/QuadTiltFlightControl.V0.Signals.lua")
+dofile("FlightControl/QuadTiltFlightControl.V0.Signals.PreMinify.lua")
 --dofile("FlightControl/SW_FlightVis.lua")
 --dofile("RailPulseEncoder.lua")
 --dofile("OnOffDecoder.lua")

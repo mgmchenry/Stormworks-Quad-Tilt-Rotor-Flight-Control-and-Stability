@@ -3,13 +3,7 @@
 -- VS 0.S11.22e Michael McHenry 2020-10-15
 -- Minifies to 3988 characters as of S11.22d
 -- Minifies to 3762 characters as of S11.22e
-sourceVS1122e="https://repl.it/@mgmchenry/Stormworks"
-
--- I have this idea for putting string constant values in a text property so further cut down on code size
---local strings = "test,test2,test3"
---for i in string.gmatch(strings, "([^,]*),") do
---   print(i)
---end
+sourceVS1122e="repl.it/@mgmchenry"
 
 local G, prop_getText, gmatch, unpack
   , commaDelimited
@@ -26,7 +20,7 @@ function(container, iterator, local_returnVals, local_context)
 	local_returnVals = {}
 	for key in iterator do
     local_context = container
-    print("key["..key.."]")
+    --print("key["..key.."]")
     for subkey in gmatch(key,'([^\.]+)') do
       local_context = local_context[subkey]
     end
@@ -37,24 +31,24 @@ end
 , -- stringUnpack
 function(text, local_returnVals)
   local_returnVals = {}
-  __debug.AlertIf({"stringUnpack text:", text})
+  --__debug.AlertIf({"stringUnpack text:", text})
   for v in gmatch(text, commaDelimited) do
-    __debug.AlertIf({"stringUnpack value: ("..v..")"})
+    --__debug.AlertIf({"stringUnpack value: ("..v..")"})
     local_returnVals[#local_returnVals+1]=v
   end
   return unpack(local_returnVals)
 end
 
 
---[ [
+--[[
 propValues["Ark0"] =
-[[
+[ [
 string,math,input,output,property
 ,tostring,ipairs,pairs
 ,input.getNumber,input.getBool,output.setNumber
 ,math.abs,math.sin,math.cos,math.max,math.atan,math.sqrt,math.floor,math.pi
-]] 
---] ]
+] ] 
+--]]
 local _string, _math, _input, _output, _property
   , _tostring, ipairz, pairz
   , in_getNumber, in_getBool, out_setNumber
@@ -205,12 +199,11 @@ t_tokenList
 ,t_OutValue
 ,f_pRun
 ] ])
-__debug.AlertIf(f_pRun~="f_pRun", "missing tokens - tokenList/pRun:", t_tokenList, f_pRun)
-__debug.AlertIf(f_pRun~="f_pRun" and {f_sAssignValues, f_sGetValues, f_sNewSignalSet, f_sAdvanceBuffer, f_sGetSmoothedValue, f_sAddSignals})
-__debug.AlertIf(f_pRun~="f_pRun" and {t_Value, t_Velocity, t_Accel, t_targetValue, t_targetVel, t_targetAccel, t_buffers, t_modPeriod, t_modOffset, t_OutValue})
-__debug.AlertIf(f_pRun~="f_pRun" and justDie())
+--__debug.AlertIf(f_pRun~="f_pRun", "missing tokens - tokenList/pRun:", t_tokenList, f_pRun)
+--__debug.AlertIf(f_pRun~="f_pRun" and {f_sAssignValues, f_sGetValues, f_sNewSignalSet, f_sAdvanceBuffer, f_sGetSmoothedValue, f_sAddSignals})
+--__debug.AlertIf(f_pRun~="f_pRun" and {t_Value, t_Velocity, t_Accel, t_targetValue, t_targetVel, t_targetAccel, t_buffers, t_modPeriod, t_modOffset, t_OutValue})
 --]]
-__debug.AlertIf(not f_pRun and justDie()) -- make sure last token requested was assigned
+--__debug.AlertIf(f_pRun~="f_pRun" and justDie())
 
 function tableValuesAssign(container, indexList, values)
   container = container or {}
@@ -266,34 +259,34 @@ function processingLogic()
       ,29                -- sensor: rotor RPS
       }
     -- 13 number inputs are defined
-    , signalLogic[f_sNewSignalSet](--13
-      --[ [    
+    , signalLogic[f_sNewSignalSet](13
+      --[[    
       {"t_pilotRoll", "t_pilotPitch", "t_pilotYaw", "t_pilotUpdown"
       , "t_pilotAxis5", "t_pilotAxis6"
       , "t_gpsX", "t_gpsY", "t_compass", "t_tiltPitch", "t_tiltRoll", "t_tiltUp"
       , "t_rotorRPS"} 
-      --] ]
+      --]]
       )
 
     -- computed signal set (5 elements) 
     -- heading, sideDrift, forwardDrift, sideAcc, forwardAcc, rotorAltitude
     -- and I prob don't need heading
-    , signalLogic[f_sNewSignalSet](--6
-      --[ [
+    , signalLogic[f_sNewSignalSet](6
+      --[[
       {"heading", "sideDrift", "forwardDrift", "sideAcc", "forwardAcc", "rotorAltitude"}
-      --] ]
+      --]]
       )
 
     -- rotors
     , {}
 
     -- rotor signal names
-    , {--getTokens(3)}
-      "thrust", "alt", "tilt"}
+    , {getTokens(3)}
+      --"thrust", "alt", "tilt"}
 
     -- rotor output elements:
-    , {--getTokens(4)}
-      "t_roTargetAcc", "t_roRotorPitchOut", "t_roPitch41G", "t_roRotorTilt"}
+    , {getTokens(4)}
+      --"t_roTargetAcc", "t_roRotorPitchOut", "t_roPitch41G", "t_roRotorTilt"}
 
     , signalLogic[f_sGetValues]
     , signalLogic[f_sAssignValues]
@@ -624,8 +617,8 @@ function signalLogic()
   --]]
   this[f_sNewSignalSet] = function(newSignalNames, newSignalElements, signalSet, bufferLength, l_NewSet, l_SetTokenList, l_newBuffers, l_newSignal)
 
-    __debug.AlertIf(isValidNumber(newSignalNames), "getting x signal tokens:", newSignalNames)
-    __debug.AlertIf(not isValidNumber(newSignalNames), "assigning tokens:", unpack(newSignalNames) )
+    --__debug.AlertIf(isValidNumber(newSignalNames), "getting x signal tokens:", newSignalNames)
+    --__debug.AlertIf(not isValidNumber(newSignalNames), "assigning tokens:", unpack(newSignalNames) )
 
     newSignalNames
       , newSignalElements
@@ -645,7 +638,7 @@ function signalLogic()
     = signalSet[t_bufferLength]
       , signalSet[t_tokenList]
 
-    __debug.AlertIf({"Using signal elements:", unpack(newSignalElements)})
+    --__debug.AlertIf({"Using signal elements:", unpack(newSignalElements)})
 
     for i,signalName in ipairz(newSignalNames) do
       l_SetTokenList[#l_SetTokenList+1] = signalName
@@ -760,12 +753,12 @@ function signalLogic()
       , list or {}
 
     for i,v in ipairz(signalKeys) do
-      __debug.AlertIf(not __debug.IsTable(signalSet), "signalSet is not a table", signalSet)
-      __debug.AlertIf(signalSet[v]==nilzies and {"signalKey", i , v, "missing from set", __debug.TableContents(signalSet[t_tokenList], "signalSet t_tokenList")},"huh")
-      __debug.AlertIf(signalSet[v]==nilzies and {__debug.TableContents(signalKeys, "signalKeys list passed to GetValues")})
-      __debug.AlertIf(__debug.IsTable(v) and {"signalKey is a table", __debug.TableContents(v, "signalKey")})
-      __debug.AlertIf(not __debug.IsTable(signalSet[v]), "signal is not a table - signalName:", v, "value", signalSet[v])
-      __debug.AlertIf(signalSet[v][elementKey]==nilzies and {"Signal element is nil. SignalKey:", v, "ElementKey:", elementKey, __debug.TableContents(signalSet[v],"signal elements")})
+      --__debug.AlertIf(not --__debug.IsTable(signalSet), "signalSet is not a table", signalSet)
+      --__debug.AlertIf(signalSet[v]==nilzies and {"signalKey", i , v, "missing from set", --__debug.TableContents(signalSet[t_tokenList], "signalSet t_tokenList")},"huh")
+      --__debug.AlertIf(signalSet[v]==nilzies and {--__debug.TableContents(signalKeys, "signalKeys list passed to GetValues")})
+      --__debug.AlertIf(--__debug.IsTable(v) and {"signalKey is a table", --__debug.TableContents(v, "signalKey")})
+      --__debug.AlertIf(not --__debug.IsTable(signalSet[v]), "signal is not a table - signalName:", v, "value", signalSet[v])
+      --__debug.AlertIf(signalSet[v][elementKey]==nilzies and {"Signal element is nil. SignalKey:", v, "ElementKey:", elementKey, --__debug.TableContents(signalSet[v],"signal elements")})
 
       list[i] = signalSet[v][elementKey]
     end
