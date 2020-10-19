@@ -3,7 +3,7 @@
 -- VS 0.S11.22e Michael McHenry 2020-10-15
 -- Minifies to 3988 characters as of S11.22d
 -- Minifies to 3762 characters as of S11.22e
-sourceVS1122d="https://repl.it/@mgmchenry/Stormworks"
+sourceVS1122e="https://repl.it/@mgmchenry/Stormworks"
 
 -- I have this idea for putting string constant values in a text property so further cut down on code size
 --local strings = "test,test2,test3"
@@ -11,28 +11,66 @@ sourceVS1122d="https://repl.it/@mgmchenry/Stormworks"
 --   print(i)
 --end
 
-local _i, _o, _m
-  , nilzies
-  = input
-  , output
-  , math
--- nilzies not assigned by design - it's just nil but minimizes to one letter
+local G, prop_getText, gmatch, unpack
+  , commaDelimited
+  , empty, nilzies
+  -- nilzies not assigned by design - it's just nil but minimizes to one letter
 
--- if I run out of upvalues again, can probably move input/output functions to processing logic scope
-local 
-  inN, outN, input_GetBool
-  , tableUnpack, ipairz 
-  = _i.getNumber
-  , _o.setNumber 
-  , _i.getBool
-  , table.unpack
-  , ipairs
+	= _ENV, property.getText, string.gmatch, table.unpack
+  , '([^,\r\n]+)'
+  , false
+
+local getTableValues, stringUnpack 
+= 
+function(container, iterator, local_returnVals, local_context)
+	local_returnVals = {}
+	for key in iterator do
+    local_context = container
+    print("key["..key.."]")
+    for subkey in gmatch(key,'([^\.]+)') do
+      local_context = local_context[subkey]
+    end
+    local_returnVals[#local_returnVals+1] = local_context
+	end
+	return unpack(local_returnVals)
+end
+, -- stringUnpack
+function(text, local_returnVals)
+  local_returnVals = {}
+  __debug.AlertIf({"stringUnpack text:", text})
+  for v in gmatch(text, commaDelimited) do
+    __debug.AlertIf({"stringUnpack value: ("..v..")"})
+    local_returnVals[#local_returnVals+1]=v
+  end
+  return unpack(local_returnVals)
+end
+
+
+--[ [
+propValues["Ark0"] =
+[[
+string,math,input,output,property
+,tostring,ipairs,pairs
+,input.getNumber,input.getBool,output.setNumber
+,math.abs,math.sin,math.cos,math.max,math.atan,math.sqrt,math.floor,math.pi
+]] 
+--] ]
+local _string, _math, _input, _output, _property
+  , _tostring, ipairz, pairz
+  , in_getNumber, in_getBool, out_setNumber
+  , abs, sin, cos, mathmax, atan2, sqrt, floor, pi
+	= getTableValues(G,gmatch(prop_getText("Ark0"), commaDelimited))
+
+-- sanity check that the function set loaded properly. Die on pi() if not
+_ = floor(pi)~=3 and pi()
+-- shorther:
+_tostring(floor(pi))
+
+
 
 local 
   -- library function names to minify
-  abs, sin, cos, mathmax
-  , atan2, sqrt
-  , pi, pi2
+  pi2
   -- script scope variables with static defined starting value
   , _tokenId
   , ticksPerSecond
@@ -41,7 +79,31 @@ local
   , ifVal
   , negativeOneIf
   , isValidNumber
-  , baseOneModulo
+  , moduloCorrect
+  , sign
+  , clamp
+  , getInputNumbers
+  , getTokens
+
+  --, newSet
+  , tableValuesAssign
+
+  -- library functions
+  = pi * 2
+  -- script scope variable defs
+  , 0 -- _tokenId
+  , 60 -- ticksPerSecond
+
+local
+  pi2
+  -- script scope variables with static defined starting value
+  , _tokenId
+  , ticksPerSecond
+  -- script scope function names to minify
+
+  , ifVal
+  , negativeOneIf
+  , isValidNumber
   , moduloCorrect
   , sign
   , clamp
@@ -53,9 +115,7 @@ local
 
 
   -- library functions
-  = _m.abs, _m.sin, _m.cos, _m.max
-  , _m.atan, _m.sqrt
-  , _m.pi, _m.pi * 2
+  = pi * 2
   -- script scope variable defs
   , 0 -- _tokenId
   , 60 -- ticksPerSecond
@@ -68,41 +128,44 @@ end
 function negativeOneIf(condition)
   return condition and -1 or 1
 end
+-- stormworks has no type() function, but \
+-- tonumber(x)==x gets the right answer for:
+-- - numbers, strings, nil, booleans, tables, and functions
+-- pass 0 as an invalidValue if that should also be rejected
 function isValidNumber(x,invalidValue)
-  return x~=nilzies and tonumber(x)==x and x~=invalidValue
-end
-function baseOneModulo(value, maxValue)
-  -- example: for an array of 30 elements, but base 1 because lua 
-  -- baseOneModulo(1,30) = 1
-  -- baseOneModulo(30,30) = 30
-  -- baseOneModulo(31,30) = 1
-  -- baseOneModulo(0,30) = 30
-  return (value - 1) % maxValue + 1
+  return tonumber(x)==x and x~=invalidValue
 end
 function moduloCorrect(value, period, offset)
+  --[[ what a sane person would write:
   if period then
-    offset = offset or 0
+    offset = offset or 1
     return (value - offset) % period + offset
   else
     return value
   end
+  --]]
+  --minified ternary form:
+  offset = offset or 1
+  return 
+    period and ( (value - offset) % period + offset )
+    or value
 end
 function sign(x)
   return x>0 and 1 or x<0 and -1 or 0
 end
 
+-- will return false if v is not a number
 function clamp(v,minVal,maxVal) 
   return isValidNumber(v) and
     (v>maxVal and maxVal or
       (v<minVal and minVal) or
       v
     )
-    or nilzies
 end
 
 function getInputNumbers(channelList, returnList)
   returnList=returnList or {}
-  for i,v in ipairz(channelList) do returnList[i]=inN(v) end
+  for i,v in ipairz(channelList) do returnList[i]=in_getNumber(v) end
   return returnList
 end
 
@@ -117,7 +180,7 @@ function getTokens(n, list, prefix)
     _tokenId = _tokenId + 1
     list[#list+1] = prefix .. _tokenId
   end
-  return tableUnpack(list)
+  return unpack(list)
 end
 
 local t_tokenList
@@ -130,16 +193,21 @@ local t_tokenList
   , t_OutValue
   -- process functions
   , f_pRun
-  = getTokens(18)
+  = stringUnpack(
+[[
+t_tokenList
+,f_sAssignValues,f_sGetValues,f_sNewSignalSet,f_sAdvanceBuffer,f_sGetSmoothedValue,f_sAddSignals
+,t_Value,t_Velocity,t_Accel
+,t_targetValue,t_targetVel,t_targetAccel
+,t_buffers,t_modPeriod,t_modOffset
+,t_OutValue
+,f_pRun
+]])
+__debug.AlertIf(f_pRun~="f_pRun", "missing tokens - tokenList/pRun:", t_tokenList, f_pRun)
+__debug.AlertIf(f_pRun~="f_pRun" and {f_sAssignValues, f_sGetValues, f_sNewSignalSet, f_sAdvanceBuffer, f_sGetSmoothedValue, f_sAddSignals})
+__debug.AlertIf(f_pRun~="f_pRun" and {t_Value, t_Velocity, t_Accel, t_targetValue, t_targetVel, t_targetAccel, t_buffers, t_modPeriod, t_modOffset, t_OutValue})
+__debug.AlertIf(f_pRun~="f_pRun" and justDie())
 
---[[
-function newSet(tokenCount, set, tokenList)
-  -- Calling with an exisiting set will increase the token count
-  set = set or {}
-  set[t_tokenList] = tokenList and {tableUnpack(tokenList)} or {getTokens(tokenCount, set[t_tokenList])}
-  return set
-end
---]]
 function tableValuesAssign(container, indexList, values)
   container = container or {}
   for i,v in ipairz(indexList) do
@@ -149,8 +217,16 @@ function tableValuesAssign(container, indexList, values)
 end
 
 --[[
+function newSet(tokenCount, set, tokenList)
+  -- Calling with an exisiting set will increase the token count
+  set = set or {}
+  set[t_tokenList] = tokenList and {unpack(tokenList)} or {getTokens(tokenCount, set[t_tokenList])}
+  return set
+end
+--]]
+--[[
 local fruitSet = newSet(6)
-local t_orange, t_banana, t_apple, t_cherry, t_melon, t_lemon = tableUnpack(fruitSet[t_tokenList])
+local t_orange, t_banana, t_apple, t_cherry, t_melon, t_lemon = unpack(fruitSet[t_tokenList])
 fruitSet[t_orange] = "juice fruit"
 fruitSet[t_apple] = "pie fruit"
 tableValuesAssign(fruitSet, 
@@ -186,34 +262,34 @@ function processingLogic()
       ,29                -- sensor: rotor RPS
       }
     -- 13 number inputs are defined
-    , signalLogic[f_sNewSignalSet](13
-      --[[    
-      , nilzies, {"t_pilotRoll", "t_pilotPitch", "t_pilotYaw", "t_pilotUpdown"
+    , signalLogic[f_sNewSignalSet](--13
+      --[ [    
+      {"t_pilotRoll", "t_pilotPitch", "t_pilotYaw", "t_pilotUpdown"
       , "t_pilotAxis5", "t_pilotAxis6"
       , "t_gpsX", "t_gpsY", "t_compass", "t_tiltPitch", "t_tiltRoll", "t_tiltUp"
-      , "t_rotorRPS"} )
-      --]]
+      , "t_rotorRPS"} 
+      --] ]
       )
 
     -- computed signal set (5 elements) 
     -- heading, sideDrift, forwardDrift, sideAcc, forwardAcc, rotorAltitude
     -- and I prob don't need heading
-    , signalLogic[f_sNewSignalSet](6
-      --[[
-      , nilzies, {"heading", "sideDrift", "forwardDrift", "sideAcc", "forwardAcc", "rotorAltitude"})
-      --]]
+    , signalLogic[f_sNewSignalSet](--6
+      --[ [
+      {"heading", "sideDrift", "forwardDrift", "sideAcc", "forwardAcc", "rotorAltitude"}
+      --] ]
       )
 
     -- rotors
     , {}
 
     -- rotor signal names
-    , {getTokens(3)}
-      --"thrust", "alt", "tilt"}
+    , {--getTokens(3)}
+      "thrust", "alt", "tilt"}
 
     -- rotor output elements:
-    , {getTokens(3)}
-      --"t_roTargetAcc", "t_roRotorPitchOut", "t_roPitch41G", "t_roRotorTilt"}
+    , {--getTokens(4)}
+      "t_roTargetAcc", "t_roRotorPitchOut", "t_roPitch41G", "t_roRotorTilt"}
 
     , signalLogic[f_sGetValues]
     , signalLogic[f_sAssignValues]
@@ -223,20 +299,20 @@ function processingLogic()
     , t_pilotAxis5, t_pilotAxis6
     , t_gpsX, t_gpsY, t_compass, t_tiltPitch, t_tiltRoll, t_tiltUp
     , t_rotorRPS
-    = tableUnpack(compositeInSignalSet[t_tokenList])
+    = unpack(compositeInSignalSet[t_tokenList])
 
   local t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc, t_rotorAltitude
-    = tableUnpack(computedSignalSet[t_tokenList])
+    = unpack(computedSignalSet[t_tokenList])
   
   -- rotor signals
   local 
     t_rAlt, t_rTiltPitch, t_rThrust    
 
-    = tableUnpack(rotorSignalNames)
+    = unpack(rotorSignalNames)
 
   local
     t_roTargetAcc, t_roRotorPitchOut, t_roPitch41G, t_roRotorTilt
-    = tableUnpack(rotorOutputNames)
+    = unpack(rotorOutputNames)
   
   -- set wrap around period and offset for compass:
   -- tableValuesAssign(container, indexList, values)
@@ -264,33 +340,66 @@ function processingLogic()
         = rotors[i]
         , {i*3+6, i*3+7, i*3+8}
 
+      -- signalLogic [f_sAssignValues] = function(signalSet, values, elementKey, signalKeys, elementKeyList)
       setSValues(
         rotorSignalSet
-        , getInputNumbers(rotorInputChannels), nilzies
+        , getInputNumbers(rotorInputChannels), t_Value
         , rotorSignalNames
       )
 
       -- raw values from these signals:
-      local rAlt, rTilt, rVelocity      
+      local rAlt, rTilt, rVelocity, rAcc
         = getSValues(rotorSignalSet, rotorSignalNames)
+      
+      roTargetAcc, roRotorPitchOut, rPitch41G, roRotorTilt
+        = getSValues(rotorSignalSet, rotorOutputNames, t_OutValue)
 
-      setSValues(
+      roTargetAcc, rAcc 
+        = targetClimbAcc
+        , getSValues(rotorSignalSet, {t_rThrust}, t_Velocity)
+
+      --[[
+      rotorAngle = rotor.tilt * pi * 2
+			tiltThrustX = cos(rotorAngle)
+			tiltThrustY = sin(rotorAngle)
+			tiltThrustPctY = tiltThrustY / (tiltThrustX + abs(tiltThrustY))
+			climbThrustAdjust = 1 / tiltThrustY
+			-- so, if we knew the vertical thrust needed, total thrust would be:
+			-- local thrustNeeded = verticalThrustNeeded * climbThrustAdjust
+      --]]
+
+      climbThrustAdjust = 
+        -- 1 / tiltThrustY
+        -- 1 / sin(rotorAngle)
+        -- 1 / sin(rTilt * pi * 2)
+        ( 1 / sin(rTilt * pi * 2) )
+        * 
+        ( -- climb thrust diminishes with high rotor tilt
+          abs(rTilt) < 0.06 and 0
+          or abs(rTilt) < 0.11 and
+          --(
+            -- rotor angle is quite forward.
+            -- increasing thrust to gain altitude is likely to hurt more than it helps
+            -- Between 0.110 and 0.06, taper climbThrustAdjust down to zero
+            mathmax(abs(rTilt)-0.06,0) * (1/0.05)
+            
+            -- Wolfram alpha graph: Plot[{Sin[2 Pi x/360], 1/Sin[2 Pi x/360],Min[{1/Sin[2 Pi x/360], 1.66}],Min[{1, Max[{0, Abs[x/360]-0.06}] * (1/(0.110-0.06)) }], Min[{1, Max[{0, Abs[x/360]-0.06}] * (1/(0.110-0.06)) }] * 1/Sin[2 Pi x/360]}, {x, -90, 90}]
+          --)
+          or 1
+        )
+
+      roRotorPitchOut = clamp((roRotorPitchOut or 0) + (roTargetAcc - rAcc) / 2 / ticksPerSecond, -1, 1)
+
+      roRotorTilt = 0
+
+      setSValues( --signal SetValues
         rotorSignalSet
         , {roTargetAcc, roRotorPitchOut, rPitch41G, roRotorTilt}, t_OutValue
         , rotorOutputNames
       )
 
-      -- *****
-
-      
-
-
-
-      -- *****
-
-
-      outN(i,roRotorPitchOut)
-      outN(i+4,roRotorTilt)
+      out_setNumber(i,roRotorPitchOut)
+      out_setNumber(i+4,roRotorTilt)
 
         
       signalLogic[f_sAdvanceBuffer](rotorSignalSet)
@@ -438,15 +547,15 @@ function processingLogic()
       }
 
     for i=1, #outVars do      
-      outN(i, --tonumber( string.format("%.4f", outVars[i]) ))
+      out_setNumber(i, --tonumber( string.format("%.4f", outVars[i]) ))
         outVars[i])
     end
 
     --[[
-    outN(9, qrAlt)
-    outN(10, altTg)
-    outN(11, outPitch)
-    outN(12, outRoll)
+    out_setNumber(9, qrAlt)
+    out_setNumber(10, altTg)
+    out_setNumber(11, outPitch)
+    out_setNumber(12, outRoll)
     --]]
 
     signalLogic[f_sAdvanceBuffer](compositeInSignalSet)
@@ -499,55 +608,26 @@ function signalLogic()
     , getTokens(3)
 
   --[[
-  -- constructor for new signalSet  
-  this[f_sNewSignalSet] = function(signalCount, bufferLength, tokenList)
-    bufferLength = bufferLength or 60
-    local signalSet, newBuffers, newSignal
-      = newSet(signalCount, nilzies, tokenList)
-    tableValuesAssign(signalSet
-      , {t_bufferLength,t_bufferPosition}
-      , {bufferLength, 1}
-      )
+    function f_sNewSignalSet - Returns a table of signals with initialized buffers
 
-    for i,signalName in ipairz(signalSet[t_tokenList]) do
-      newSignal, newBuffers
-        = {}, {}     
+    Return new set with x generic token signal names with default elements and buffer length:
+    f_sNewSignalSet(signalCount) 
 
-      -- stick the new signal and buffers where they go
-      signalSet[signalName]
-        , newSignal[t_buffers]
-
-        = newSignal
-        , newBuffers
-
-      for ei, element in ipairz(defaultSignalElements) do
-        newSignal[element] = nilzies
-        newBuffers[element] = {}
-        -- initialize the buffers for this signal element to complete size
-        for bi = 1,bufferLength do
-          newBuffers[element][bi] = nilzies
-        end
-      end
-
-    end
-    return signalSet
-  end
+    or pass in a set of signal names:
+    f_sNewSignalSet(newSignalNames, newSignalElements, signalSet, bufferLength)
+    - if newSignalElements and bufferLength are nil, defaults will be used
+    - if an existing signalSet is passed in, it will be expanded with new signals
   --]]
-
-  --old:
-  --this[f_sAddSignals] = function(signalSet, newSignalNames, newSignalElements)
-  --this[f_sNewSignalSet] = function(signalCount, bufferLength, tokenList)
-  --new:
-  -- function(signalCount) -or-
-  -- function(newSignalNames, newSignalElements, signalSet, bufferLength)
   this[f_sNewSignalSet] = function(newSignalNames, newSignalElements, signalSet, bufferLength, l_NewSet, l_SetTokenList, l_newBuffers, l_newSignal)
+
+    __debug.AlertIf(isValidNumber(newSignalNames), "getting x signal tokens:", newSignalNames)
+    __debug.AlertIf(not isValidNumber(newSignalNames), "assigning tokens:", unpack(newSignalNames) )
 
     newSignalNames
       , newSignalElements
-      , l_NewSet
+      , l_NewSet    
 
     = isValidNumber(newSignalNames) and {getTokens(newSignalNames)} or newSignalNames
-      -- elements could be a number and should be replaced with nil
       , newSignalElements or defaultSignalElements
       , tableValuesAssign(nilzies
           , {t_tokenList, t_bufferLength, t_bufferPosition}
@@ -560,6 +640,8 @@ function signalLogic()
       , l_SetTokenList
     = signalSet[t_bufferLength]
       , signalSet[t_tokenList]
+
+    __debug.AlertIf({"Using signal elements:", unpack(newSignalElements)})
 
     for i,signalName in ipairz(newSignalNames) do
       l_SetTokenList[#l_SetTokenList+1] = signalName
@@ -577,11 +659,11 @@ function signalLogic()
         , l_newBuffers
 
       for ei, element in ipairz(newSignalElements) do
-        l_newSignal[element] = nilzies
+        l_newSignal[element] = empty
         l_newBuffers[element] = {}
         -- initialize the buffers for this signal element to complete size
         for bi = 1,bufferLength do
-          l_newBuffers[element][bi] = nilzies
+          l_newBuffers[element][bi] = empty
         end
       end
     end
@@ -594,7 +676,7 @@ function signalLogic()
       , signalElements
       , signal
       
-      = baseOneModulo(signalSet[t_bufferPosition] + 1, signalSet[t_bufferLength])
+      = moduloCorrect(signalSet[t_bufferPosition] + 1, signalSet[t_bufferLength])
 
     signalSet[t_bufferPosition] = currentIndex
     
@@ -622,8 +704,8 @@ function signalLogic()
       , elementKey or t_Value
 
     --print("assign Values", #values, "element:"..elementKey, "signalKeys:", #signalKeys, # elementKeyList)
-    --print("assign keys", tableUnpack(signalKeys))
-    --print("signal tokens", tableUnpack(signalSet[t_tokenList]))
+    --print("assign keys", unpack(signalKeys))
+    --print("signal tokens", unpack(signalSet[t_tokenList]))
 
     for i,signalKey in ipairz(signalKeys) do 
       local bufferPosition
@@ -674,9 +756,16 @@ function signalLogic()
       , list or {}
 
     for i,v in ipairz(signalKeys) do
+      __debug.AlertIf(not __debug.IsTable(signalSet), "signalSet is not a table", signalSet)
+      __debug.AlertIf(signalSet[v]==nilzies and {"signalKey", i , v, "missing from set", __debug.TableContents(signalSet[t_tokenList], "signalSet t_tokenList")},"huh")
+      __debug.AlertIf(signalSet[v]==nilzies and {__debug.TableContents(signalKeys, "signalKeys list passed to GetValues")})
+      __debug.AlertIf(__debug.IsTable(v) and {"signalKey is a table", __debug.TableContents(v, "signalKey")})
+      __debug.AlertIf(not __debug.IsTable(signalSet[v]), "signal is not a table - signalName:", v, "value", signalSet[v])
+      __debug.AlertIf(signalSet[v][elementKey]==nilzies and {"Signal element is nil. SignalKey:", v, "ElementKey:", elementKey, __debug.TableContents(signalSet[v],"signal elements")})
+
       list[i] = signalSet[v][elementKey]
     end
-    return tableUnpack(list)
+    return unpack(list)
   end
 
   this[f_sGetSmoothedValue] = function(signalSet, signalKey, elementKey, smoothTicks, delayTicks)
@@ -714,7 +803,7 @@ function signalLogic()
     smoothTicks = clamp(smoothTicks, 1, bufferLength - delayTicks)
     
     for i = 0, smoothTicks - 1 do
-      sampleIndex = baseOneModulo(currentIndex - delayTicks - i , bufferLength)
+      sampleIndex = moduloCorrect(currentIndex - delayTicks - i , bufferLength)
       sample = valueBuffer[sampleIndex]
       baseValue = baseValue or sample
       diffSum = diffSum + (
@@ -742,7 +831,7 @@ local luaTick, lastTick
   , -1 -- lastTick=
 
 function onTick()
-	if inN(1) == nilzies then return false end -- safety check
+	if in_getNumber(1) == nilzies then return false end -- safety check
 	
 	luaTick=luaTick+1
   --[[

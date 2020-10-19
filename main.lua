@@ -3,8 +3,10 @@
 inValues, outValues, inBools, outBools = {}, {}, {}, {}
 table.unpack = table.unpack or unpack
 
+
 -- Set up SW environment
 dofile("Stormworks_Stub.lua")
+
 
 
 propValues["BaseIndex"] = 1

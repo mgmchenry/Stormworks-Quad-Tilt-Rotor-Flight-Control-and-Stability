@@ -1,3 +1,46 @@
+_ENV = _G
+
+__debug = {
+  AlertIf = function (condition, ...)
+    if condition then
+      if __debug.IsTable(condition) then print(unpack(condition)) end
+      if select(1,...) then print(...) end
+    end
+    return true
+  end
+  , IsTable = function (v)
+    return string.sub(tostring(v),1,5) == "table"
+  end
+  , TableContents = function(value, label)
+    label = label and ("("..tostring(label)..") ") or ""
+    if value==nil then
+      print(label.."cannot expand as table, value is nil")
+      return
+    end
+    if type(value) == "table" then
+      print(label.."table contents:")
+      local valueCount = 0
+      for key,v in pairs(value) do
+        print(key, v)
+        valueCount = valueCount + 1
+      end
+      print(label.."Table value count:", valueCount)
+    else
+      print(label.."value is not a table")
+      local sType, sVal = type(value), "<???>"
+      if sType == "string" then
+        sVal = "("..value..")"
+      elseif sType == "boolean" then
+        sVal = "(".. (value and "true" or "false") ..")"
+      elseif sType == "number" then
+        sVal = "("..string.format(value)..")"
+      end
+      print(label..sType..":"..sVal)
+    end
+  end
+}
+
+
 for i=1,32 do
   inValues[i]=nil
   outValues[i]=nil
@@ -74,6 +117,9 @@ screen = {
 propValues = {}
 property = {
   getNumber=f("getNumber", function(key) 
+    return propValues[key] 
+  end)
+  , getText=f("getText", function(key) 
     return propValues[key] 
   end)
 }

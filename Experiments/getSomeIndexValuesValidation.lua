@@ -3,6 +3,29 @@ local function catchArray(...)
   return {...}
 end
 
+
+local propTest = [[
+	{label="target rps",min=0,max=20,r=120,g=0,b=0},
+	{label="rps",min=0,max=20,r=0,g=120,b=0},
+	{label="throttle",min=0,max=1,r=0,g=0,b=120},
+	{label="temp",min=-20,max=130,r=120,g=0,b=120},
+	{label="generator",min=0,max=600,r=120,g=120,b=0},
+	{label="fuel",min=0,max=187.5,r=0,g=120,b=120}
+]]
+--propTest = "1,2,3"
+
+
+for section in string.gmatch(propTest, '([^{]+)}') do
+  print("section", section)
+  for value in string.gmatch(section, 
+    '([^,]+)'
+    ) do
+    print("val: ", value)
+  end
+end
+
+
+
 min = math.min
 max = math.max
 tableUnpack = table.unpack
