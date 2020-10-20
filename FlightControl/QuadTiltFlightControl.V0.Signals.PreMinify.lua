@@ -5,7 +5,7 @@
 -- Minifies to 3762 characters as of S11.22e
 -- Minifies to 4102 characters as of S11.23a
 -- Minifies to 4072 characters as of S11.23b
-sourceVS1123b="repl.it/@mgmchenry"
+sourceVS1123c="repl.it/@mgmchenry"
 
 local G, prop_getText, gmatch, unpack
   , propPrefix

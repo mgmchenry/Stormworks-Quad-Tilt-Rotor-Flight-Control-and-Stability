@@ -5,16 +5,16 @@
 -- Minifies to 3762 characters as of S11.22e
 -- Minifies to 4102 characters as of S11.23a
 -- Minifies to 4072 characters as of S11.23b
-sourceVS1123b="repl.it/@mgmchenry"
-
--- ToDo: Some changes to PreMinify version need to be migrated back to this file
+sourceVS1123c="repl.it/@mgmchenry"
 
 local G, prop_getText, gmatch, unpack
+  , propPrefix
   , commaDelimited
   , empty, nilzies
   -- nilzies not assigned by design - it's just nil but minimizes to one letter
 
 	= _ENV, property.getText, string.gmatch, table.unpack
+  , "Ark"
   , '([^,\r\n]+)'
   , false
 
@@ -108,7 +108,7 @@ end
 -- - numbers, strings, nil, booleans, tables, and functions
 -- pass 0 as an invalidValue if that should also be rejected
 function isValidNumber(x,invalidValue)
-  return tonumber(x)==x and x~=invalidValue
+  return _tonumber(x)==x and x~=invalidValue
 end
 function moduloCorrect(value, period, offset)
   --[[ what a sane person would write:
@@ -186,6 +186,7 @@ __debug.AlertIf(f_pRun~="f_pRun" and {t_Value, t_Velocity, t_Accel, t_targetValu
 __debug.AlertIf(f_pRun~="f_pRun" and justDie())
 --]]
 __debug.AlertIf(not f_pRun and justDie()) -- make sure last token requested was assigned
+__debug.AlertIf(not f_pRun=="token_".._tokenId and justDie()) -- make sure last token requested was assigned
 
 function tableValuesAssign(container, indexList, values)
   container = container or {}
@@ -223,7 +224,8 @@ function processingLogic()
   local this
     , compositeInSignalChannels
     , compositeInSignalSet
-    , computedSignalSet
+    --, computedSignalSet
+    , computedSignalNames
     , rotors
     , rotorSignalNames
     , rotorOutputNames
@@ -253,11 +255,11 @@ function processingLogic()
     -- computed signal set (5 elements) 
     -- heading, sideDrift, forwardDrift, sideAcc, forwardAcc, rotorAltitude
     -- and I prob don't need heading
-    , signalLogic[f_sNewSignalSet](--6
+    , --signalLogic[f_sNewSignalSet](6
+      {--getTokens(6)}
       --[ [
-      {"heading", "sideDrift", "forwardDrift", "sideAcc", "forwardAcc", "rotorAltitude"}
+      "heading", "sideDrift", "forwardDrift", "sideAcc", "forwardAcc", "rotorAltitude"}
       --] ]
-      )
 
     -- rotors
     , {}
@@ -281,7 +283,8 @@ function processingLogic()
     = unpack(compositeInSignalSet[t_tokenList])
 
   local t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc, t_rotorAltitude
-    = unpack(computedSignalSet[t_tokenList])
+    = --unpack(computedSignalSet[t_tokenList])
+    unpack(computedSignalNames)
   
   -- rotor signals
   local 
@@ -300,6 +303,8 @@ function processingLogic()
     , {t_modPeriod, t_modOffset}
     , {1, -0.5}
     )
+  -- def: signalLogic[f_sNewSignalSet] = function(newSignalNames, newSignalElements, signalSet, bufferLength)
+  signalLogic[f_sNewSignalSet](computedSignalNames, nilzies, compositeInSignalSet)
 
   
   for i=1,4 do
@@ -467,15 +472,12 @@ function processingLogic()
 
     -- signalLogic[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
     setSValues(
-      computedSignalSet
-      , {sideDrift, forwardDrift, sideAcc, forwardAcc}, t_Value
-      , {t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc}
+      compositeInSignalSet
+      , {heading, sideDrift, forwardDrift, sideAcc, forwardAcc, sRotorAlt}, t_Value
+      , computedSignalNames 
+      --{t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc, t_rotorAltitude}
+      -- {"heading", "sideDrift", "forwardDrift", "sideAcc", "forwardAcc", "rotorAltitude"}
       )
-    
-    -- dealing with alt/climb
-    setSValues(computedSignalSet
-      , {sRotorAlt}, t_Value
-      , {t_rotorAltitude})
     
     local altTarget, soon
       , altSoon
@@ -484,7 +486,7 @@ function processingLogic()
       , targetClimbAcc
 
       -- get current altTarget
-      = getSValues(computedSignalSet
+      = getSValues(compositeInSignalSet
       , {t_rotorAltitude}, t_targetValue)
       -- assign if it's nil
       or sRotorAlt>0 and (sRotorAlt + 0.5)
@@ -494,8 +496,8 @@ function processingLogic()
 
 
     altClimbRate, altClimbAcc 
-      = getSValues(computedSignalSet, {t_rotorAltitude}, t_Velocity )
-      , getSValues(computedSignalSet, {t_rotorAltitude}, t_Accel )
+      = getSValues(compositeInSignalSet, {t_rotorAltitude}, t_Velocity )
+      , getSValues(compositeInSignalSet, {t_rotorAltitude}, t_Accel )
 
     altClimbRateSoon = altClimbRate + altClimbAcc * soon
     altSoon = sRotorAlt + (altClimbRate + altClimbRateSoon) / 2 * soon
@@ -554,7 +556,7 @@ function processingLogic()
     --]]
 
     signalLogic[f_sAdvanceBuffer](compositeInSignalSet)
-    signalLogic[f_sAdvanceBuffer](computedSignalSet)
+    --signalLogic[f_sAdvanceBuffer](computedSignalSet)
   end
 
   
