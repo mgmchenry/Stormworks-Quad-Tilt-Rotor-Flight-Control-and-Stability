@@ -5,7 +5,7 @@
 -- Minifies to 3762 characters as of S11.22e
 -- Minifies to 4102 characters as of S11.23a
 -- Minifies to 4072 characters as of S11.23b
-sourceVS1123c="repl.it/@mgmchenry"
+sourceVS1123d="repl.it/@mgmchenry"
 
 local G, prop_getText, gmatch, unpack
   , propPrefix
@@ -77,7 +77,6 @@ local
   -- script scope function names to minify
 
   , ifVal
-  , negativeOneIf
   , isValidNumber
   , moduloCorrect
   , sign
@@ -100,10 +99,7 @@ local
 function ifVal(condition, ifTrue, ifFalse)
   return condition and ifTrue or ifFalse
 end
-function negativeOneIf(condition)
-  return condition and -1 or 1
-end
--- stormworks has no type() function, but \
+-- stormworks has no type() function, but 
 -- tonumber(x)==x gets the right answer for:
 -- - numbers, strings, nil, booleans, tables, and functions
 -- pass 0 as an invalidValue if that should also be rejected
@@ -313,7 +309,7 @@ function processingLogic()
     signalLogic[f_sNewSignalSet](rotorOutputNames, {t_OutValue}, rotors[i])
   end
 
-  function runRotorLogic(targetClimbAcc)
+  function runRotorLogic(targetClimbAcc, targetPitchAcc)
     for i=1,4 do        
       local rotorSignalSet
         , rotorInputChannels
@@ -370,9 +366,13 @@ function processingLogic()
           or 1
         )
       
-      roTargetAcc = targetClimbAcc * climbThrustAdjust
+      roTargetAcc = (targetClimbAcc
+        + targetPitchAcc 
+        --rotorAxisPolarity = negativeOneIf(i < 3)
+        * ifVal(i<3, -1, 1)
+        ) * climbThrustAdjust
 
-      roRotorPitchOut = clamp((roRotorPitchOut or 0) + (roTargetAcc - rAcc) / 2 / ticksPerSecond, -1, 1)
+      roRotorPitchOut = clamp((roRotorPitchOut or 0) + (roTargetAcc - rAcc) / 20 / ticksPerSecond, -1, 1)
 
       roRotorTilt = 0
 
@@ -513,7 +513,7 @@ function processingLogic()
 
     targetClimbAcc = (altClimbRateTarget - altClimbRateSoon) / soon
 
-    runRotorLogic(targetClimbAcc)
+    runRotorLogic(targetClimbAcc, pilotPitch - sTiltPitch)
 
       --[[
       --dubug outs
