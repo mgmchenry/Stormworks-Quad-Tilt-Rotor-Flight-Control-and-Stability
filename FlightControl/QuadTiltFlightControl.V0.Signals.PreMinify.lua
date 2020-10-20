@@ -1,17 +1,20 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
 -- Signals Refactor
--- VS 0.S11.23a Michael McHenry 2020-10-19
+-- VS 0.S11.23b Michael McHenry 2020-10-19
 -- Minifies to 3988 characters as of S11.22d
 -- Minifies to 3762 characters as of S11.22e
 -- Minifies to 4102 characters as of S11.23a
-sourceVS1123a="repl.it/@mgmchenry"
+-- Minifies to 4072 characters as of S11.23b
+sourceVS1123b="repl.it/@mgmchenry"
 
 local G, prop_getText, gmatch, unpack
+  , propPrefix
   , commaDelimited
   , empty, nilzies
   -- nilzies not assigned by design - it's just nil but minimizes to one letter
 
 	= _ENV, property.getText, string.gmatch, table.unpack
+  , "Ark"
   , '([^,\r\n]+)'
   , false
 
@@ -21,9 +24,11 @@ function(container, iterator, local_returnVals, local_context)
 	local_returnVals = {}
 	for key in iterator do
     local_context = container
-    --print("key["..key.."]")
-    for subkey in gmatch(key,'([^\.]+)') do
+    --__debug.AlertIf({"key["..key.."]"})
+    for subkey in gmatch(key,'([^. ]+)') do
+      --__debug.AlertIf({"subkey["..subkey.."]"})
       local_context = local_context[subkey]
+      --__debug.AlertIf({"context:", string.sub(tostring(local_context),1,20)})
     end
     local_returnVals[#local_returnVals+1] = local_context
 	end
@@ -47,6 +52,9 @@ propValues["Ark0"] =
 string,math,input,output,property
 ,tostring,tonumber,ipairs,pairs
 ,input.getNumber,input.getBool,output.setNumber
+] ]
+propValues["Ark1"] =
+[ [
 ,math.abs,math.sin,math.cos,math.max,math.atan,math.sqrt,math.floor,math.pi
 ] ] 
 --]]
@@ -54,7 +62,7 @@ local _string, _math, _input, _output, _property
   , _tostring, _tonumber, ipairz, pairz
   , in_getNumber, in_getBool, out_setNumber
   , abs, sin, cos, mathmax, atan2, sqrt, floor, pi
-	= getTableValues(G,gmatch(prop_getText("Ark0"), commaDelimited))
+	= getTableValues(G,gmatch(prop_getText(propPrefix..0)..prop_getText(propPrefix..1), commaDelimited))
 
 -- sanity check that the function set loaded properly. Die on pi() if not
 -- _ = floor(pi)~=3 and pi()
@@ -214,7 +222,8 @@ function processingLogic()
   local this
     , compositeInSignalChannels
     , compositeInSignalSet
-    , computedSignalSet
+    --, computedSignalSet
+    , computedSignalNames
     , rotors
     , rotorSignalNames
     , rotorOutputNames
@@ -244,11 +253,11 @@ function processingLogic()
     -- computed signal set (5 elements) 
     -- heading, sideDrift, forwardDrift, sideAcc, forwardAcc, rotorAltitude
     -- and I prob don't need heading
-    , signalLogic[f_sNewSignalSet](6
+    , --signalLogic[f_sNewSignalSet](6
+      {getTokens(6)}
       --[[
       {"heading", "sideDrift", "forwardDrift", "sideAcc", "forwardAcc", "rotorAltitude"}
       --]]
-      )
 
     -- rotors
     , {}
@@ -272,7 +281,8 @@ function processingLogic()
     = unpack(compositeInSignalSet[t_tokenList])
 
   local t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc, t_rotorAltitude
-    = unpack(computedSignalSet[t_tokenList])
+    = --unpack(computedSignalSet[t_tokenList])
+    unpack(computedSignalNames)
   
   -- rotor signals
   local 
@@ -291,6 +301,8 @@ function processingLogic()
     , {t_modPeriod, t_modOffset}
     , {1, -0.5}
     )
+  -- def: signalLogic[f_sNewSignalSet] = function(newSignalNames, newSignalElements, signalSet, bufferLength)
+  signalLogic[f_sNewSignalSet](computedSignalNames, nilzies, compositeInSignalSet)
 
   
   for i=1,4 do
@@ -458,16 +470,11 @@ function processingLogic()
 
     -- signalLogic[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
     setSValues(
-      computedSignalSet
-      , {sideDrift, forwardDrift, sideAcc, forwardAcc}, t_Value
-      , {t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc}
+      compositeInSignalSet
+      , {sideDrift, forwardDrift, sideAcc, forwardAcc, sRotorAlt}, t_Value
+      , {t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc, t_rotorAltitude}
       )
-    
-    -- dealing with alt/climb
-    setSValues(computedSignalSet
-      , {sRotorAlt}, t_Value
-      , {t_rotorAltitude})
-    
+        
     local altTarget, soon
       , altSoon
       , altClimbRate, altClimbRateTarget, altClimbRateSoon
@@ -475,7 +482,7 @@ function processingLogic()
       , targetClimbAcc
 
       -- get current altTarget
-      = getSValues(computedSignalSet
+      = getSValues(compositeInSignalSet
       , {t_rotorAltitude}, t_targetValue)
       -- assign if it's nil
       or sRotorAlt>0 and (sRotorAlt + 0.5)
@@ -485,8 +492,8 @@ function processingLogic()
 
 
     altClimbRate, altClimbAcc 
-      = getSValues(computedSignalSet, {t_rotorAltitude}, t_Velocity )
-      , getSValues(computedSignalSet, {t_rotorAltitude}, t_Accel )
+      = getSValues(compositeInSignalSet, {t_rotorAltitude}, t_Velocity )
+      , getSValues(compositeInSignalSet, {t_rotorAltitude}, t_Accel )
 
     altClimbRateSoon = altClimbRate + altClimbAcc * soon
     altSoon = sRotorAlt + (altClimbRate + altClimbRateSoon) / 2 * soon
@@ -508,6 +515,8 @@ function processingLogic()
 
     runRotorLogic(targetClimbAcc)
 
+      --[[
+      --dubug outs
     local outVars = {
       sGpsX, xVel, xAcc
       , sGpsY, yVel, yAcc
@@ -516,22 +525,34 @@ function processingLogic()
       , 60277 --12
       , sideDrift, forwardDrift
       , sideAcc, forwardAcc
-      }
+    }
+      --]]
 
-    for i=1, #outVars do      
-      out_setNumber(i, --tonumber( string.format("%.4f", outVars[i]) ))
-        outVars[i])
+    --for i=1, #outVars do
+    for i,v in ipairz( 
+      {
+        sRotorAlt, altTarget
+        , pilotPitch, pilotRoll
+        , sideDrift, forwardDrift
+        , sideAcc, forwardAcc
+      }) do
+      out_setNumber(i+9, v)
+      --tonumber( string.format("%.4f", v) ))
     end
 
-    --[[
-    out_setNumber(9, qrAlt)
-    out_setNumber(10, altTg)
-    out_setNumber(11, outPitch)
-    out_setNumber(12, outRoll)
+    --[[ Old Version:
+      outN(9, qrAlt)
+      outN(10, altTg)
+      outN(11, outPitch)
+      outN(12, outRoll)
+      outN(13, sideDrift)
+      outN(14, headDrift)
+      outN(15, xAcc)
+      outN(16, yAcc)
     --]]
 
     signalLogic[f_sAdvanceBuffer](compositeInSignalSet)
-    signalLogic[f_sAdvanceBuffer](computedSignalSet)
+    --signalLogic[f_sAdvanceBuffer](computedSignalSet)
   end
 
   

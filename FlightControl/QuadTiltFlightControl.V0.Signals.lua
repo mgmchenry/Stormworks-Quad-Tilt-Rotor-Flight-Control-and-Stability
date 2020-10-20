@@ -1,10 +1,13 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
 -- Signals Refactor
--- VS 0.S11.22e Michael McHenry 2020-10-15
+-- VS 0.S11.23b Michael McHenry 2020-10-19
 -- Minifies to 3988 characters as of S11.22d
 -- Minifies to 3762 characters as of S11.22e
 -- Minifies to 4102 characters as of S11.23a
-sourceVS1123a="repl.it/@mgmchenry"
+-- Minifies to 4072 characters as of S11.23b
+sourceVS1123b="repl.it/@mgmchenry"
+
+-- ToDo: Some changes to PreMinify version need to be migrated back to this file
 
 local G, prop_getText, gmatch, unpack
   , commaDelimited
@@ -21,9 +24,11 @@ function(container, iterator, local_returnVals, local_context)
 	local_returnVals = {}
 	for key in iterator do
     local_context = container
-    print("key["..key.."]")
-    for subkey in gmatch(key,'([^\.]+)') do
+    __debug.AlertIf({"key["..key.."]"})
+    for subkey in gmatch(key,'([^. ]+)') do
+      __debug.AlertIf({"subkey["..subkey.."]"})
       local_context = local_context[subkey]
+      __debug.AlertIf({"context:", string.sub(tostring(local_context),1,20)})
     end
     local_returnVals[#local_returnVals+1] = local_context
 	end
@@ -41,20 +46,23 @@ function(text, local_returnVals)
 end
 
 
---[ [
+--[[
 propValues["Ark0"] =
-[[
+[ [
 string,math,input,output,property
 ,tostring,tonumber,ipairs,pairs
 ,input.getNumber,input.getBool,output.setNumber
+] ]
+propValues["Ark1"] =
+[ [
 ,math.abs,math.sin,math.cos,math.max,math.atan,math.sqrt,math.floor,math.pi
-]] 
---] ]
+] ] 
+--]]
 local _string, _math, _input, _output, _property
   , _tostring, _tonumber, ipairz, pairz
   , in_getNumber, in_getBool, out_setNumber
   , abs, sin, cos, mathmax, atan2, sqrt, floor, pi
-	= getTableValues(G,gmatch(prop_getText("Ark0"), commaDelimited))
+	= getTableValues(G,gmatch(prop_getText(propPrefix..0)..prop_getText(propPrefix..1), commaDelimited))
 
 -- sanity check that the function set loaded properly. Die on pi() if not
 --_ = floor(pi)~=3 and pi()
@@ -509,6 +517,8 @@ function processingLogic()
 
     runRotorLogic(targetClimbAcc)
 
+      --[[
+      --dubug outs
     local outVars = {
       sGpsX, xVel, xAcc
       , sGpsY, yVel, yAcc
@@ -517,18 +527,30 @@ function processingLogic()
       , 60277 --12
       , sideDrift, forwardDrift
       , sideAcc, forwardAcc
-      }
+    }
+      --]]
 
-    for i=1, #outVars do      
-      out_setNumber(i, --tonumber( string.format("%.4f", outVars[i]) ))
-        outVars[i])
+    --for i=1, #outVars do
+    for i,v in ipairz( 
+      {
+        sRotorAlt, altTarget
+        , pilotPitch, pilotRoll
+        , sideDrift, forwardDrift
+        , sideAcc, forwardAcc
+      }) do
+      out_setNumber(i+9, v)
+      --tonumber( string.format("%.4f", v) ))
     end
 
-    --[[
-    out_setNumber(9, qrAlt)
-    out_setNumber(10, altTg)
-    out_setNumber(11, outPitch)
-    out_setNumber(12, outRoll)
+    --[[ Old Version:
+      outN(9, qrAlt)
+      outN(10, altTg)
+      outN(11, outPitch)
+      outN(12, outRoll)
+      outN(13, sideDrift)
+      outN(14, headDrift)
+      outN(15, xAcc)
+      outN(16, yAcc)
     --]]
 
     signalLogic[f_sAdvanceBuffer](compositeInSignalSet)

@@ -15,6 +15,9 @@ propValues["Ark0"] =
 string,math,input,output,property
 ,tostring,tonumber,ipairs,pairs
 ,input.getNumber,input.getBool,output.setNumber
+]]
+propValues["Ark1"] =
+[[
 ,math.abs,math.sin,math.cos,math.max,math.atan,math.sqrt,math.floor,math.pi
 ]] 
 --dofile("QuadFlightControl.V0.07.15.lua")
