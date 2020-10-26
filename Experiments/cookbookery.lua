@@ -1,3 +1,32 @@
+--http://lua-users.org/wiki/StringRecipes
+--Iterate over words in a string (adapted from Lua manual)
+-- words and numbers
+for word in str:gmatch("%w+") do ... end
+
+-- identifiers in typical programming languages
+for id in str:gmatch("[_%a][_%w]*") do ... end
+
+-- whitespace-separated components (without handling quotes)
+for id in str:gmatch("%S+") do ... end
+--Iterate over lines in a buffer, ignoring empty lines
+--(works for both DOS and Unix line ending conventions)
+for line in str:gmatch("[^\r\n]+") do ... end
+--Any of the above can also be done as a function iterator:
+
+-- call func with each word in a string
+str:gsub("%w+", func)
+
+
+https://github.com/stravant/lua-minify/blob/master/minify.lua
+
+https://www.lexaloffle.com/bbs/?tid=36804
+
+local function writefile(filename, extension, input)
+   local file = io.open(filename.."."..extension, "w")
+  file:write(input)
+file:close()
+print('successfully created "'..filename..'.'..extension..'"')
+end
 
 --[[
 PID notes -
@@ -31,3 +60,40 @@ The function string.format is a powerful tool when formatting strings, typically
 In the first example, the %.4f means a floating-point number with four digits after the decimal point. In the second example, the %02d means a decimal number (`d´), with at least two digits and zero padding; the directive %2d, without the zero, would use blanks for padding. For a complete description of those directives, see the Lua reference manual. Or, better yet, see a C manual, as Lua calls the standard C libraries to do the hard work here.
 
 --]]
+
+
+--property hex parsing:
+local function setPropColor(name, colors)
+  colors = {}
+  for hexByte in string.gmatch(property.getText(name), '%x%x') do
+  	print("hexByte", tonumber(hexByte, 16))
+    colors[#colors+1] = tonumber(hexByte, 16)
+  end
+  screen.setColor(table.unpack(colors))
+end
+
+function onTick()
+end
+
+function onDraw()
+    w = screen.getWidth()
+    h = screen.getHeight()
+    setPropColor("buttonColor")
+    screen.drawCircleF(w / 2, h / 2, 30)
+    setPropColor("backColor")
+    screen.drawCircleF(w / 3, h / 3, 20)   
+end
+
+-- some incomplete ideas on config parsing:
+local configText = "background:FF00FF,button:0xFFFF00,etc:10A0B0"
+
+
+
+function getConfig(text, configTable)
+  configTable = configTable or {}
+  for i1, kvpair in pairs(split(text, '([^,\r\n]+)')) do
+    kvpair = split(kvpair, '[^:]+')
+    ke
+    for hexByte in string.gmatch(someHex,'%x%x') do
+  print(tonumber(hexByte,16))
+end
