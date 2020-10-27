@@ -1,12 +1,13 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
 -- Signals Refactor
--- VS 0.S11.23b Michael McHenry 2020-10-19
+-- VT 0.T11.24a Michael McHenry 2020-10-19
 -- Minifies to 3988 characters as of S11.22d
 -- Minifies to 3762 characters as of S11.22e
 -- Minifies to 4102 characters as of S11.23a
 -- Minifies to 4072 characters as of S11.23b
 -- Minifies to 4054 characters as of S11.23c
---sourceVS1123c="repl.it/@mgmchenry"
+-- Minifies to 3981 characters as of S11.23e
+sourceVT1124a="repl.it/@mgmchenry"
 
 local G, prop_getText, gmatch, unpack
   , propPrefix
@@ -148,35 +149,32 @@ end
 
 
 -- _tokenId is initialized to 0 above
-function getTokens(n, list, prefix)
-  n, list, prefix
-    = n or 1
-    , list or {}
-    , prefix or "token_"
-  for i=#list+1,n do
+function getTokens(n, prefix, returnList)
+  prefix, returnList
+    = prefix or "token_"
+    , {}
+  for i=1,n do
     _tokenId = _tokenId + 1
-    list[i] = prefix .. _tokenId
+    returnList[i] = prefix .. _tokenId
   end
   --__debug.AlertIf({"Tokens Assigned", unpack(list)})
-  return unpack(list)
+  return unpack(returnList)
 end
 
 local t_tokenList
-  -- signal functions
-  , f_sAssignValues, f_sGetValues, f_sNewSignalSet, f_sAdvanceBuffer, f_sGetSmoothedValue, f_sAddSignals
   -- signal elements
   , t_Value, t_Velocity, t_Accel
   , t_targetValue, t_targetVel, t_targetAccel
   , t_buffers, t_modPeriod, t_modOffset
   , t_OutValue
+  , t_signalElements
   -- process functions
   , f_pRun
-  = getTokens(18)
+  = getTokens(13)
 --[[
 stringUnpack(
 [ [
 t_tokenList
-,f_sAssignValues,f_sGetValues,f_sNewSignalSet,f_sAdvanceBuffer,f_sGetSmoothedValue,f_sAddSignals
 ,t_Value,t_Velocity,t_Accel
 ,t_targetValue,t_targetVel,t_targetAccel
 ,t_buffers,t_modPeriod,t_modOffset
@@ -189,7 +187,7 @@ __debug.AlertIf(f_pRun~="f_pRun" and {t_Value, t_Velocity, t_Accel, t_targetValu
 __debug.AlertIf(f_pRun~="f_pRun" and justDie())
 --]]
 --__debug.AlertIf(not f_pRun and justDie()) -- make sure last token requested was assigned
---__debug.AlertIf(not f_pRun=="token_".._tokenId and justDie()) -- make sure last token requested was assigned
+__debug.AlertIf(not f_pRun=="token_".._tokenId and justDie()) -- make sure last token requested was assigned
 
 function tableValuesAssign(container, indexList, values)
   container = container or {}
@@ -199,42 +197,38 @@ function tableValuesAssign(container, indexList, values)
   return container
 end
 
---[[
-function newSet(tokenCount, set, tokenList)
-  -- Calling with an exisiting set will increase the token count
-  set = set or {}
-  set[t_tokenList] = tokenList and {unpack(tokenList)} or {getTokens(tokenCount, set[t_tokenList])}
-  return set
-end
---]]
---[[
-local fruitSet = newSet(6)
-local t_orange, t_banana, t_apple, t_cherry, t_melon, t_lemon = unpack(fruitSet[t_tokenList])
-fruitSet[t_orange] = "juice fruit"
-fruitSet[t_apple] = "pie fruit"
-tableValuesAssign(fruitSet, 
-  {t_banana, t_cherry, t_melon, t_lemon}, 
-  {"snack", "pie fruit", "picnic fruit", "too sour fruit"})
---]]
+  -- signal functions
+  --, f_sAssignValues, f_sGetValues, f_sAdvanceBuffer, f_sGetSmoothedValue, f_sAddSignals
 
-
-local signals, signalLogic, processingLogic, rotorLogic
+local bufferLength, bufferPosition
+  , defaultSignalElements
+  , signalTable, processingLogic
+  -- signal processing function names:
+  , getSignalValues
+  , setSignalValues
+  , addSignalNames
+  , getSmoothedValue
+  , advanceSignalBuffer
+  =
+  60, 0 
+  , { -- signal elements
+      t_Value, t_Velocity, t_Accel
+      , t_targetValue, t_targetVel, t_targetAccel
+    }
 
 -- deferred definition is expanded below with
 -- processingLogic = processingLogic()
--- but signalLogic must be expanded first
 function processingLogic()
   local this
     , compositeInSignalChannels
-    , compositeInSignalSet
+    --, compositeInSignalSet
+    , compositeSignalNames
     --, computedSignalSet
     , computedSignalNames
     , rotors
     , rotorSignalNames
     , rotorOutputNames
     -- and some functions
-    , getSValues
-    , setSValues
     , runRotorLogic
 
     = {}
@@ -246,14 +240,16 @@ function processingLogic()
       ,29                -- sensor: rotor RPS
       }
     -- 13 number inputs are defined
-    , signalLogic[f_sNewSignalSet]({getTokens(13
+    --, addSignalNames(compositeSignalNames
+    , {getTokens(13
       --[[    
       ,{"t_pilotRoll", "t_pilotPitch", "t_pilotYaw", "t_pilotUpdown"
       , "t_pilotAxis5", "t_pilotAxis6"
       , "t_gpsX", "t_gpsY", "t_compass", "t_tiltPitch", "t_tiltRoll", "t_tiltUp"
       , "t_rotorRPS"} 
       --]]
-      )})
+      )}
+    --)
 
     -- computed signal set (5 elements) 
     -- heading, sideDrift, forwardDrift, sideAcc, forwardAcc, rotorAltitude
@@ -268,84 +264,47 @@ function processingLogic()
     -- rotors
     , {}
 
-    -- rotor signal names
-    , {getTokens(3)}
-      --"thrust", "alt", "tilt"}
-
-    -- rotor output elements:
-    , {getTokens(4
-      --, {"t_roTargetAcc", "t_roRotorPitchOut", "t_roPitch41G", "t_roRotorTilt"}
-    )}
-
-    , signalLogic[f_sGetValues]
-    , signalLogic[f_sAssignValues]
 
   -- index tokens for all 13 compositeInSignalSet elements:
   local t_pilotRoll, t_pilotPitch, t_pilotYaw, t_pilotUpdown
     , t_pilotAxis5, t_pilotAxis6
     , t_gpsX, t_gpsY, t_compass, t_tiltPitch, t_tiltRoll, t_tiltUp
     , t_rotorRPS
-    = unpack(compositeInSignalSet[t_tokenList])
+    = unpack(compositeSignalNames)
 
   local t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc, t_rotorAltitude
     = --unpack(computedSignalSet[t_tokenList])
     unpack(computedSignalNames)
   
-  -- rotor signals
-  local 
-    t_rAlt, t_rTiltPitch, t_rThrust    
-
-    = unpack(rotorSignalNames)
-
-  local
-    t_roTargetAcc, t_roRotorPitchOut, t_roPitch41G, t_roRotorTilt
-    = unpack(rotorOutputNames)
   
-  -- set wrap around period and offset for compass:
-  -- tableValuesAssign(container, indexList, values)
-  tableValuesAssign(
-    compositeInSignalSet[t_compass]
-    , {t_modPeriod, t_modOffset}
-    , {1, -0.5}
-    )
-  -- def: signalLogic[f_sNewSignalSet] = function(newSignalNames, newSignalElements, signalSet, bufferLength)
-  signalLogic[f_sNewSignalSet](computedSignalNames, nilzies, compositeInSignalSet)
-
-  
-  for i=1,4 do
-    -- def: signalLogic[f_sNewSignalSet] = function(newSignalNames, newSignalElements, signalSet, bufferLength)
-    rotors[i]
-      = signalLogic[f_sNewSignalSet](rotorSignalNames)
-    -- def: signalLogic[f_sNewSignalSet] = function(newSignalNames, newSignalElements, signalSet, bufferLength)
-    signalLogic[f_sNewSignalSet](rotorOutputNames, {t_OutValue}, rotors[i])
-  end
-
   function runRotorLogic(targetClimbAcc, targetPitchAcc, targetRollAcc, targetAlt)
-    for i=1,4 do        
-      local rotorSignalSet
-        , rotorInputChannels
+    for i=1,4 do    
+    
+      rotorSignalNames, rotorOutputNames = unpack(rotors[i])
+
+      local rotorInputChannels
+        , t_rAlt, t_rTiltPitch, t_rThrust
         -- rotor sensors: rotor.alt, rotor.tilt, rotor.vel
         , roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt
         , climbThrustAdjust
-        = rotors[i]
-        , {i*3+6, i*3+7, i*3+8}
+        = {i*3+6, i*3+7, i*3+8}
+        , unpack(rotorSignalNames)
+        
+      local
+        t_roTargetAcc, t_roRotorPitchOut, t_roPitch41G, t_roRotorTilt
+        = unpack(rotorOutputNames)
 
-      -- signalLogic [f_sAssignValues] = function(signalSet, values, elementKey, signalKeys, elementKeyList)
-      setSValues(
-        rotorSignalSet
-        , getInputNumbers(rotorInputChannels), t_Value
-        , rotorSignalNames
-      )
+      setSignalValues(getInputNumbers(rotorInputChannels), rotorSignalNames)
 
       -- raw values from these signals:
       local rAlt, rTilt, rVelocity, rAcc
-        = getSValues(rotorSignalSet, rotorSignalNames)
+        = getSignalValues(rotorSignalNames)
       
       roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt
-        = getSValues(rotorSignalSet, rotorOutputNames, t_OutValue)
+        = getSignalValues(rotorOutputNames, t_OutValue)
 
       rAcc 
-        = getSValues(rotorSignalSet, {t_rThrust}, t_Velocity)
+        = getSignalValues({t_rThrust}, t_Velocity)
 
       --[[
       rotorAngle = rotor.tilt * pi * 2
@@ -387,18 +346,10 @@ function processingLogic()
 
       roRotorTilt = 0
 
-      setSValues( --signal SetValues
-        rotorSignalSet
-        , {roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt}, t_OutValue
-        , rotorOutputNames
-      )
+      setSignalValues({roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt}, rotorOutputNames, t_OutValue)
 
       out_setNumber(i,roRotorPitchOut)
       out_setNumber(i+4,roRotorTilt)
-
-        
-      signalLogic[f_sAdvanceBuffer](rotorSignalSet)
-
     end
 
   end
@@ -406,22 +357,25 @@ function processingLogic()
   -- processing.run() function:
   this[f_pRun] = function()
     --signalLogic[f_sAssignValues](
-    setSValues(
-      compositeInSignalSet
-      , getInputNumbers(compositeInSignalChannels)
-    )
-
-    -- todo: non-signal input mcTick is on channel 30
+    setSignalValues(getInputNumbers(compositeInSignalChannels), compositeSignalNames)
 
     local sRotorAlt
       -- raw values from these signals:
-      , sTiltPitch, sTiltUp, sGpsX, sGpsY, sCompass
       , pilotRoll, pilotPitch, pilotYaw, pilotUpdown
+      , pilotAxis5, pilotAxis6
+      , sGpsX, sGpsY, sCompass, sTiltPitch, sTiltRoll, sTiltUp
+      , sRPS
 
       = 0
-      , getSValues(compositeInSignalSet
-        , {t_tiltPitch, t_tiltUp, t_gpsX, t_gpsY, t_compass
-        , t_pilotRoll, t_pilotPitch, t_pilotYaw, t_pilotUpdown})
+      , getSignalValues(compositeSignalNames)
+
+    --[[
+      compositeSignalNames
+      t_pilotRoll, t_pilotPitch, t_pilotYaw, t_pilotUpdown
+    , t_pilotAxis5, t_pilotAxis6
+    , t_gpsX, t_gpsY, t_compass, t_tiltPitch, t_tiltRoll, t_tiltUp
+    , t_rotorRPS
+    ]]        
 
     -- rotor altitude sensors - average from all 4
     for i,v in ipairz(getInputNumbers({9,12,15,18})) do
@@ -434,19 +388,14 @@ function processingLogic()
     end
 
     -- update corrected values
-    setSValues(compositeInSignalSet
-      , {sTiltPitch}, t_Value
-      , {t_tiltPitch})
+    setSignalValues({sTiltPitch}, {t_tiltPitch})
 
     -- rate of change (t_Velocity) from these signals
     local yawRate, rollRate, pitchRate, xVel, yVel
-      = getSValues(compositeInSignalSet
-        , {t_compass, t_tiltRoll, t_tiltPitch, t_gpsX, t_gpsY}, t_Velocity)
+      = getSignalValues({t_compass, t_tiltRoll, t_tiltPitch, t_gpsX, t_gpsY}, t_Velocity)
       
     local xAcc, yAcc
-      = getSValues(compositeInSignalSet
-        , {t_gpsX, t_gpsY}, t_Accel)
-
+      = getSignalValues({t_gpsX, t_gpsY}, t_Accel)
 
     -- corrected roll =
     -- asin((sin(x*pi/180))/(sin((90-y)*pi/180)))*180/pi
@@ -468,25 +417,13 @@ function processingLogic()
       , atan2(yAcc, xAcc) / pi2 -- accAngle
       , sqrt(xAcc*xAcc + yAcc*yAcc) --xyAcc
 
-    --[[ from flightvis    
-    sideDrift = sin(pi2 * (velAngle - polarOffset)) * -xyVel
-    headDrift = cos(pi2 * (velAngle - polarOffset)) * xyVel 
-    --]]
-
     sideDrift, forwardDrift, sideAcc, forwardAcc
       = sin(pi2 * (velAngle - heading)) * -xyVel
       , cos(pi2 * (velAngle - heading)) * xyVel
       , sin(pi2 * (accAngle - heading)) * -xyAcc
       , cos(pi2 * (accAngle - heading)) * xyAcc    
 
-    -- signalLogic[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
-    setSValues(
-      compositeInSignalSet
-      , {heading, sideDrift, forwardDrift, sideAcc, forwardAcc, sRotorAlt}, t_Value
-      , computedSignalNames 
-      --{t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc, t_rotorAltitude}
-      -- {"heading", "sideDrift", "forwardDrift", "sideAcc", "forwardAcc", "rotorAltitude"}
-      )
+    setSignalValues({heading, sideDrift, forwardDrift, sideAcc, forwardAcc, sRotorAlt}, computedSignalNames)
     
     local altTarget, soon
       , altSoon
@@ -495,8 +432,7 @@ function processingLogic()
       , targetClimbAcc
 
       -- get current altTarget
-      = getSValues(compositeInSignalSet
-      , {t_rotorAltitude}, t_targetValue)
+      = getSignalValues({t_rotorAltitude}, t_targetValue)
       -- assign if it's nil
       or sRotorAlt>0 and (sRotorAlt + 0.5)
 
@@ -505,8 +441,8 @@ function processingLogic()
 
 
     altClimbRate, altClimbAcc 
-      = getSValues(compositeInSignalSet, {t_rotorAltitude}, t_Velocity )
-      , getSValues(compositeInSignalSet, {t_rotorAltitude}, t_Accel )
+      = getSignalValues({t_rotorAltitude}, t_Velocity )
+      , getSignalValues({t_rotorAltitude}, t_Accel )
 
     altClimbRateSoon = altClimbRate + altClimbAcc * soon
     altSoon = sRotorAlt + (altClimbRate + altClimbRateSoon) / 2 * soon
@@ -534,18 +470,6 @@ function processingLogic()
       , pilotRoll
       , altTarget)
 
-      --[[
-      --dubug outs
-    local outVars = {
-      sGpsX, xVel, xAcc
-      , sGpsY, yVel, yAcc
-      , xyVel, xyAcc --7,8
-      , sCompass, heading, yawRate -- 9,10,11
-      , 60277 --12
-      , sideDrift, forwardDrift
-      , sideAcc, forwardAcc
-    }
-      --]]
 
     --for i=1, #outVars do
     for i,v in ipairz( 
@@ -559,9 +483,235 @@ function processingLogic()
       --tonumber( string.format("%.4f", v) ))
     end
 
-    signalLogic[f_sAdvanceBuffer](compositeInSignalSet)
+    advanceSignalBuffer()
+  end
+  -- End of processing.run
+
+
+  --[[
+    function f_sNewSignalSet - Returns a table of signals with initialized buffers
+
+    Return new set with x generic token signal names with default elements and buffer length:
+    f_sNewSignalSet(signalCount) 
+
+    or pass in a set of signal names:
+    f_sNewSignalSet(newSignalNames, newSignalElements, signalSet, bufferLength)
+    - if newSignalElements and bufferLength are nil, defaults will be used
+    - if an existing signalSet is passed in, it will be expanded with new signals
+  --]]
+  addSignalNames = function(newSignalNames, newSignalElements, l_SetTokenList, l_newBuffers, l_newSignal)
+    --__debug.AlertIf(isValidNumber(newSignalNames), "getting x signal tokens:", newSignalNames)
+    --__debug.AlertIf(not isValidNumber(newSignalNames), "assigning tokens:", unpack(newSignalNames) )
+
+    newSignalElements
+      , signalTable    
+
+    = newSignalElements or defaultSignalElements
+      , signalTable or tableValuesAssign(nilzies
+          , {t_tokenList}
+          , {{}}
+        )
+        
+    l_SetTokenList = signalTable[t_tokenList]
+
+    --__debug.AlertIf({"Using signal elements:", unpack(newSignalElements)})
+
+    for i,signalName in ipairz(newSignalNames) do
+      l_SetTokenList[#l_SetTokenList+1] = signalName
+
+      l_newSignal, l_newBuffers
+      = {}, {}     
+
+      -- stick the new signal and buffers where they go
+      signalTable[signalName]
+        , l_newSignal[t_signalElements]
+        , l_newSignal[t_buffers]
+
+      = l_newSignal
+        , newSignalElements
+        , l_newBuffers
+
+      for ei, element in ipairz(newSignalElements) do
+        l_newSignal[element] = empty
+        l_newBuffers[element] = {}
+        -- initialize the buffers for this signal element to complete size
+        for bi = 1,bufferLength do
+          l_newBuffers[element][bi] = empty
+        end
+      end
+    end
+
+    return signalSet
   end
 
+  advanceSignalBuffer = function(_localSignal, _localSignalElements)
+    bufferPosition = moduloCorrect(bufferPosition + 1, bufferLength)
+    
+    for i,signalName in ipairz(signalTable[t_tokenList]) do
+      signal = signalTable[signalName]
+      signalElements = signal[t_signalElements] or defaultSignalElements
+      -- let's clear buffer values at this position
+      for ei, element in ipairz(signalElements) do
+        signal[t_buffers][element][bufferPosition] = empty
+      end
+    end
+  end
+
+  -- multiple assign values list to elements of list of signal signalKeys
+  -- defaults if nil/omitted:
+  -- elementKey = t_Value
+  -- signalKeys list is all signals in the set (t_tokenList)
+  -- propogates derived values (velocity from value, acceleration from velocity)
+  setSignalValues = function(values, signalKeys, elementKey)
+    elementKey = elementKey or t_Value
+
+    --[[
+    __debug.AlertIf({"assign values count", #values, "element:"..elementKey, "signalKeys count:", #signalKeys})
+    __debug.AlertIf({"assign values", unpack(values)})
+    __debug.AlertIf({"assign to keys", unpack(signalKeys)})
+    __debug.AlertIf({"all signal names:", unpack(signalTable[t_tokenList])})
+    --]]
+
+    for i,signalKey in ipairz(signalKeys) do 
+      local signal
+        , cascadeMap
+        , valueBuffer
+        , cascadeElement
+        , currentValue, previousValue, delta
+
+      = signalTable[signalKey]
+        -- cascadeMap contruction - value delta is velocity. velocity delta is accel
+        , tableValuesAssign(nilzies, {t_Value, t_Velocity}, {t_Velocity, t_Accel})
+      
+      valueBuffer = signal[t_buffers] -- firt get buffer container for this signal
+      valueBuffer = valueBuffer[elementKey] -- inside, buffer for this element
+
+      currentValue = moduloCorrect(values[i],signal[t_modPeriod],signal[t_modOffset])
+
+      signal[elementKey] = currentValue
+      valueBuffer[bufferPosition] = currentValue
+      cascadeElement = cascadeMap[elementKey]
+
+      if cascadeElement then
+        -- def: this[f_sGetSmoothedValue] = function(signalSet, signalKey, elementKey, smoothTicks, delayTicks)
+        currentValue = getSmoothedValue(signalKey, elementKey, 4)
+        -- smoothed over 4 ticks should be decent, 8 ticks ago
+        previousValue = getSmoothedValue(signalKey, elementKey, 4, 8)
+
+        delta = moduloCorrect(
+          currentValue - previousValue
+          ,signal[t_modPeriod],signal[t_modOffset]
+          ) * ticksPerSecond / 8
+
+        --signal[cascadeElement] = delta
+        -- ^ doesn't cut it because velocity won't cascade to accel that way
+        -- so:
+        -- def: this[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
+        setSignalValues({delta}, {signalKey}, cascadeElement)        
+      end
+    end
+  end
+
+  getSignalValues = function(signalKeys, elementKey, returnList)
+    elementKey, returnList 
+      = elementKey or t_Value
+      , returnList or {}
+
+    --[[
+    __debug.AlertIf({"get values keyCount count", #signalKeys, "element:"..elementKey})
+    __debug.AlertIf({"assign to keys", unpack(signalKeys)})
+    __debug.AlertIf({"all signal names:", unpack(signalTable[t_tokenList])})
+    --]]
+
+    for i,v in ipairz(signalKeys) do
+      --__debug.AlertIf(not __debug.IsTable(signalSet), "signalSet is not a table", signalSet)
+      --__debug.AlertIf(signalSet[v]==nilzies and {"signalKey", i , v, "missing from set", __debug.TableContents(signalSet[t_tokenList], "signalSet t_tokenList")},"huh")
+      --__debug.AlertIf(signalSet[v]==nilzies and {__debug.TableContents(signalKeys, "signalKeys list passed to GetValues")})
+      --__debug.AlertIf(__debug.IsTable(v) and {"signalKey is a table", __debug.TableContents(v, "signalKey")})
+      --__debug.AlertIf(not __debug.IsTable(signalSet[v]), "signal is not a table - signalName:", v, "value", signalSet[v])
+      --__debug.AlertIf(signalSet[v][elementKey]==nilzies and {"Signal element is nil. SignalKey:", v, "ElementKey:", elementKey, __debug.TableContents(signalSet[v],"signal elements")})
+
+      returnList[i] = signalTable[v][elementKey]
+    end
+    return unpack(returnList)
+  end
+
+  getSmoothedValue = function(signalKey, elementKey, smoothTicks, delayTicks)
+    elementKey
+      , smoothTicks
+      , delayTicks 
+
+      = elementKey or t_Value
+      , smoothTicks or 3
+      , delayTicks or 0
+    
+    local signal
+      , diffSum
+
+      , valueBuffer
+      , sample
+      , baseValue
+
+      = signalTable[signalKey]
+      -- should be: signalTable[signalKey][t_buffers][elementKey]
+      -- but split the value buffer retrieval into discrete steps for debugging purposes for now
+      , 0 -- avg default. nil values will coalesce to 0
+
+    -- valueBuffer = signalSet[signalKey][t_buffers][elementKey]:
+    valueBuffer = signal[t_buffers][elementKey]
+
+    -- no more delay ticks than we have on hand. Leave room for one sample. minimum 0
+    delayTicks = clamp(delayTicks, 0, bufferLength - 1)
+    -- make sure we get at least 1 tick, but no more ticks than the buffer contains or wrapping back to current
+    smoothTicks = clamp(smoothTicks, 1, bufferLength - delayTicks)
+    
+    for i = 0, smoothTicks - 1 do
+      --sampleIndex = moduloCorrect(bufferPosition - delayTicks - i , bufferLength)
+      --sample = valueBuffer[sampleIndex]
+      sample = valueBuffer[--sampleIndex
+        moduloCorrect(bufferPosition - delayTicks - i , bufferLength)]
+
+      baseValue = baseValue or sample
+      diffSum = diffSum + (
+        isValidNumber(sample) and 
+        moduloCorrect(sample - baseValue
+          ,signal[t_modPeriod],signal[t_modOffset])
+        or 0)
+    end
+    return 
+    moduloCorrect(
+      diffSum / smoothTicks + (baseValue or 0)
+      ,signal[t_modPeriod],signal[t_modOffset])
+  end
+
+  --[[
+    Signal set init begins - this might get moved into onTick loop
+  --]]
+
+  
+  addSignalNames(compositeSignalNames)
+
+  -- set wrap around period and offset for compass:
+  -- tableValuesAssign(container, indexList, values)
+  tableValuesAssign(
+    signalTable[t_compass]
+    , {t_modPeriod, t_modOffset}
+    , {1, -0.5}
+    )
+
+  addSignalNames(computedSignalNames)
+
+  
+  for i=1,4 do
+    rotorSignalNames = {getTokens(3,"R"..i)}
+      --"thrust", "alt", "tilt"}
+    rotorOutputNames = {getTokens(4,"RO"..i)}
+      --, {"t_roTargetAcc", "t_roRotorPitchOut", "t_roPitch41G", "t_roRotorTilt"}
+      
+    rotors[i] = {rotorSignalNames, rotorOutputNames}
+    addSignalNames(rotorSignalNames)
+    addSignalNames(rotorOutputNames, {t_OutValue}, rotors[i])
+  end
   
   return this
 end
@@ -595,235 +745,8 @@ signalSet = {
 }
 
 --]]
-function signalLogic()
-  local this
-    , defaultSignalElements
-    , t_bufferPosition, t_bufferLength, t_signalElements
-    = {}
-    , 
-    { -- signal elements
-      t_Value, t_Velocity, t_Accel
-      , t_targetValue, t_targetVel, t_targetAccel
-    }
-    , getTokens(3)
-
-  --[[
-    function f_sNewSignalSet - Returns a table of signals with initialized buffers
-
-    Return new set with x generic token signal names with default elements and buffer length:
-    f_sNewSignalSet(signalCount) 
-
-    or pass in a set of signal names:
-    f_sNewSignalSet(newSignalNames, newSignalElements, signalSet, bufferLength)
-    - if newSignalElements and bufferLength are nil, defaults will be used
-    - if an existing signalSet is passed in, it will be expanded with new signals
-  --]]
-  this[f_sNewSignalSet] = function(newSignalNames, newSignalElements, signalSet, bufferLength, l_NewSet, l_SetTokenList, l_newBuffers, l_newSignal)
-
-    --__debug.AlertIf(isValidNumber(newSignalNames), "getting x signal tokens:", newSignalNames)
-    --__debug.AlertIf(not isValidNumber(newSignalNames), "assigning tokens:", unpack(newSignalNames) )
-
-    newSignalNames
-      , newSignalElements
-      , l_NewSet    
-
-    = isValidNumber(newSignalNames) and {getTokens(newSignalNames)} or newSignalNames
-      , newSignalElements or defaultSignalElements
-      , tableValuesAssign(nilzies
-          , {t_tokenList, t_bufferLength, t_bufferPosition}
-          , {{}, bufferLength or 60, 1}
-        )
-
-    signalSet = signalSet or l_NewSet
-
-    bufferLength
-      , l_SetTokenList
-    = signalSet[t_bufferLength]
-      , signalSet[t_tokenList]
-
-    --__debug.AlertIf({"Using signal elements:", unpack(newSignalElements)})
-
-    for i,signalName in ipairz(newSignalNames) do
-      l_SetTokenList[#l_SetTokenList+1] = signalName
-
-      l_newSignal, l_newBuffers
-      = {}, {}     
-
-      -- stick the new signal and buffers where they go
-      signalSet[signalName]
-        , l_newSignal[t_signalElements]
-        , l_newSignal[t_buffers]
-
-      = l_newSignal
-        , newSignalElements
-        , l_newBuffers
-
-      for ei, element in ipairz(newSignalElements) do
-        l_newSignal[element] = empty
-        l_newBuffers[element] = {}
-        -- initialize the buffers for this signal element to complete size
-        for bi = 1,bufferLength do
-          l_newBuffers[element][bi] = empty
-        end
-      end
-    end
-
-    return signalSet
-  end
-
-  this[f_sAdvanceBuffer] = function(signalSet)
-    local currentIndex
-      , signalElements
-      , signal
-      
-      = moduloCorrect(signalSet[t_bufferPosition] + 1, signalSet[t_bufferLength])
-
-    signalSet[t_bufferPosition] = currentIndex
-    
-    for i,signalName in ipairz(signalSet[t_tokenList]) do
-      signal = signalSet[signalName]
-      signalElements = signal[t_signalElements] or defaultSignalElements
-      -- let's clear buffer values at this position
-      for ei, element in ipairz(signalElements) do
-        signal[t_buffers][element][currentIndex] = empty
-      end
-    end
-  end
-
-  -- multiple assign values list to elements of list of signal signalKeys
-  -- defaults if nil/omitted:
-  -- elementKey = t_Value
-  -- signalKeys list is all signals in the set (t_tokenList)
-  -- propogates derived values (velocity from value, acceleration from velocity)
-  this[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys, elementKeyList)
-    elementKeyList
-      , signalKeys
-      , elementKey
-      = elementKeyList or {elementKey or t_Value}
-      , signalKeys or signalSet[t_tokenList]
-      , elementKey or t_Value
-
-    --print("assign Values", #values, "element:"..elementKey, "signalKeys:", #signalKeys, # elementKeyList)
-    --print("assign keys", unpack(signalKeys))
-    --print("signal tokens", unpack(signalSet[t_tokenList]))
-
-    for i,signalKey in ipairz(signalKeys) do 
-      local bufferPosition
-        , signal
-        , cascadeMap
-        , valueBuffer
-        , cascadeElement
-        , currentValue, previousValue, delta
-
-      = signalSet[t_bufferPosition]
-        , signalSet[signalKey]
-        -- cascadeMap contruction - value delta is velocity. velocity delta is accel
-        , tableValuesAssign(nilzies, {t_Value, t_Velocity}, {t_Velocity, t_Accel})
-      
-      valueBuffer = signal[t_buffers] -- firt get buffer container for this signal
-      valueBuffer = valueBuffer[elementKey] -- inside, buffer for this element
-
-      currentValue = moduloCorrect(values[i],signal[t_modPeriod],signal[t_modOffset])
-
-      signal[elementKey] = currentValue
-      valueBuffer[bufferPosition] = currentValue
-      cascadeElement = cascadeMap[elementKey]
-
-      if cascadeElement then
-        -- def: this[f_sGetSmoothedValue] = function(signalSet, signalKey, elementKey, smoothTicks, delayTicks)
-        currentValue = this[f_sGetSmoothedValue](signalSet, signalKey, elementKey, 4)
-        -- smoothed over 4 ticks should be decent, 8 ticks ago
-        previousValue = this[f_sGetSmoothedValue](signalSet, signalKey, elementKey, 4, 8)
-
-        delta = moduloCorrect(
-          currentValue - previousValue
-          ,signal[t_modPeriod],signal[t_modOffset]
-          ) * ticksPerSecond / 8
-
-        --signal[cascadeElement] = delta
-        -- ^ doesn't cut it because velocity won't cascade to accel that way
-        -- so:
-        -- def: this[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
-        this[f_sAssignValues](signalSet, {delta}, cascadeElement, {signalKey})
-        
-      end
-    end
-  end
-
-  this[f_sGetValues] = function(signalSet, signalKeys, elementKey, list)
-    elementKey, list 
-      = elementKey or t_Value
-      , list or {}
-
-    for i,v in ipairz(signalKeys) do
-      --__debug.AlertIf(not __debug.IsTable(signalSet), "signalSet is not a table", signalSet)
-      --__debug.AlertIf(signalSet[v]==nilzies and {"signalKey", i , v, "missing from set", __debug.TableContents(signalSet[t_tokenList], "signalSet t_tokenList")},"huh")
-      --__debug.AlertIf(signalSet[v]==nilzies and {__debug.TableContents(signalKeys, "signalKeys list passed to GetValues")})
-      --__debug.AlertIf(__debug.IsTable(v) and {"signalKey is a table", __debug.TableContents(v, "signalKey")})
-      --__debug.AlertIf(not __debug.IsTable(signalSet[v]), "signal is not a table - signalName:", v, "value", signalSet[v])
-      --__debug.AlertIf(signalSet[v][elementKey]==nilzies and {"Signal element is nil. SignalKey:", v, "ElementKey:", elementKey, __debug.TableContents(signalSet[v],"signal elements")})
-
-      list[i] = signalSet[v][elementKey]
-    end
-    return unpack(list)
-  end
-
-  this[f_sGetSmoothedValue] = function(signalSet, signalKey, elementKey, smoothTicks, delayTicks)
-    elementKey
-      , smoothTicks
-      , delayTicks 
-
-      = elementKey or t_Value
-      , smoothTicks or 3
-      , delayTicks or 0
-    
-    local currentIndex
-      , bufferLength
-      , signal
-      , diffSum
-
-      , valueBuffer
-      , sample
-      , sampleIndex
-      , baseValue
-
-      = signalSet[t_bufferPosition]
-      , signalSet[t_bufferLength]
-      -- should be: signalSet[signalKey][t_buffers][elementKey]
-      , signalSet[signalKey] --[t_buffers][elementKey]
-      -- but split the value buffer retrieval into discrete steps for debugging purposes for now
-      , 0 -- avg default. nil values will coalesce to 0
-
-    -- valueBuffer = signalSet[signalKey][t_buffers][elementKey]:
-    valueBuffer = signal[t_buffers][elementKey]
-
-    -- no more delay ticks than we have on hand. Leave room for one sample. minimum 0
-    delayTicks = clamp(delayTicks, 0, bufferLength - 1)
-    -- make sure we get at least 1 tick, but no more ticks than the buffer contains or wrapping back to current
-    smoothTicks = clamp(smoothTicks, 1, bufferLength - delayTicks)
-    
-    for i = 0, smoothTicks - 1 do
-      sampleIndex = moduloCorrect(currentIndex - delayTicks - i , bufferLength)
-      sample = valueBuffer[sampleIndex]
-      baseValue = baseValue or sample
-      diffSum = diffSum + (
-        isValidNumber(sample) and 
-        moduloCorrect(sample - baseValue
-          ,signal[t_modPeriod],signal[t_modOffset])
-        or 0)
-    end
-    return 
-    moduloCorrect(
-      diffSum / smoothTicks + (baseValue or 0)
-      ,signal[t_modPeriod],signal[t_modOffset])
-  end
-
-  return this
-end
 
 -- Actual Init for deferred logic definitions
-signalLogic = signalLogic()
---rotorLogic = rotorLogic()
 processingLogic = processingLogic()
 
 

@@ -97,3 +97,80 @@ function getConfig(text, configTable)
     for hexByte in string.gmatch(someHex,'%x%x') do
   print(tonumber(hexByte,16))
 end
+
+
+--[[
+jbaker roll correction discussion:
+https://discord.com/channels/357480372084408322/525362818455699457/683593174622535681
+[2:03 AM] jbaker96 (Boeing Autopilot): @Ritty tilt sensors dont measure tilt on one axis, they just measure their angle above the horizon
+[2:03 AM] Ritty: Yeah don't worry, we've figured all that out
+[2:04 AM] jbaker96 (Boeing Autopilot): last i saw you were talking about reading the angles from pivots and such though?
+[2:05 AM] Ritty: Yeah I'm about to test that out actually.
+[2:07 AM] jbaker96 (Boeing Autopilot): still sounds to me like youre working way too hard to get data from the tilt sensors
+[2:07 AM] jbaker96 (Boeing Autopilot): if you want to measure roll all you have to do is point a tilt sensor left or right on your vehicle to measure your roll angle above the horizon, same for pitch
+[2:07 AM] jbaker96 (Boeing Autopilot): just pointing forward for pitch
+[2:07 AM] Ritty: Okay. But if you read what I said, I want 360*
+[2:08 AM] Ritty: Tilt sensors only measure 180
+[2:08 AM] jbaker96 (Boeing Autopilot): -90 to +90
+[2:08 AM] jbaker96 (Boeing Autopilot): if you want 360 roll you need 1 tilt sensor pointing straight up, and all you need to do is check if its positive or negative
+[2:08 AM] Ritty: Nope. Tried that.
+[2:09 AM] Ritty: Seriously, read the entire conversation first. Because I've already gone through everything you've suggested so far
+[2:09 AM] jbaker96 (Boeing Autopilot): if its positive, you can just use your current roll angle as given by the roll tilt sensor, if its negative you can just add 180 to the roll value
+[2:09 AM] jbaker96 (Boeing Autopilot): ive literally done this before, trust me
+[2:09 AM] Ritty: That's LITERALLY what I started with
+[2:09 AM] jbaker96 (Boeing Autopilot): although wait dont do that, its slightly more complicated than that
+[2:10 AM] Ritty: But it doesn't work. Because as soon as I pitch up, it starts skipping and displaying wrong numbers
+[2:10 AM] jbaker96 (Boeing Autopilot): but seriously ive done this exact thing
+[2:10 AM] jbaker96 (Boeing Autopilot): are you using lua? or just the regular logic blocks in the mc?
+[2:10 AM] Ritty: read the conversation
+[2:11 AM] RemKiwi: Can someone send me a good tutorial on how to make a multi propellor advanced plane?
+[2:11 AM] MMorin2020: Have a brief issue regarding my stabilizers. If the positive side of the track is meant to point to the left, does that mean the tilt sensor should be pointing to the right?
+[2:11 AM] jbaker96 (Boeing Autopilot): i did, and it seemed that through the entire conversation you didnt fully understand how tilt sensors worked
+[2:11 AM] MMorin2020: I think I mixed it briefly.
+[2:11 AM] Ritty: I'm not trying to be rude or anything, but it's actually frustrating me that you're just saying things i've done
+[2:11 AM] jbaker96 (Boeing Autopilot): and im telling you exactly how ive done it and made it work
+[2:12 AM] Ritty: So you're telling me
+[2:12 AM] Ritty:
+
+[2:12 AM] Ritty: You read this part?
+[2:12 AM] jbaker96 (Boeing Autopilot): just gonna load up the game real quick so i can tell you exactly how i did it
+[2:12 AM] Ritty: Where I explicitly explain the thing I set up that's pretty much what you suggested
+[2:26 AM] jbaker96 (Boeing Autopilot): @Ritty
+
+[2:26 AM] jbaker96 (Boeing Autopilot): if your setup did something like this it would work
+[2:27 AM] jbaker96 (Boeing Autopilot): pretty much the same doesnt usually cut it in math
+[2:27 AM] BossyMr: @Ritty Can’t you use two tilt sensors then? One pointing up and one down, you could then figure out the tilt as a combination of the two.
+[2:29 AM] jbaker96 (Boeing Autopilot): that setup in my pic will give you -180 to +180 roll
+[2:29 AM] jbaker96 (Boeing Autopilot): or 0 - 360 if you just add 180 to the output
+[2:31 AM] Aussie_Alaskan: @Nova the Protogen
+
+[2:32 AM] Ritty: Is there any reason why the formulas aren't just 
+180 - x and
+-180 - x?
+[2:33 AM] jbaker96 (Boeing Autopilot): yes, its to make sure that x is subtracted from the 90 before the rest is added up
+[2:33 AM] jbaker96 (Boeing Autopilot): you could also do 90-x+90
+[2:33 AM] jbaker96 (Boeing Autopilot): and -90-x-90 for the second one
+[2:35 AM] jbaker96 (Boeing Autopilot): actually ya you could do that
+[2:58 AM] Ritty: Okay so I went to the effort of setting everything up exactly as you described.
+[2:58 AM] Ritty: Not only does it do what my original setup did
+[2:59 AM] Ritty: It ALSO suffers the same issue
+[2:59 AM] Ritty: https://puu.sh/FfYwL/66fb0059dd.mp4
+[2:59 AM] Ritty: Ignore the horizon, visual, focus on the numbers. Especially when I'm pitching up a lot, you'll see it skip large numbers (Like from 70 to 120*)
+[3:29 AM] jbaker96 (Boeing Autopilot): that is due to a slightly different issue
+[3:30 AM] jbaker96 (Boeing Autopilot): take for example if your pitch angle is 0 degrees relative to the horizon, then if you do a complete roll, your roll sensor will be able to go a full 90 degrees above and below the horizon
+[3:30 AM] jbaker96 (Boeing Autopilot): but if your pitch is 90 degrees relative to the horizon, your roll sensor will never be able to leave the horizon, constantly outputting 0
+[3:31 AM] jbaker96 (Boeing Autopilot): and its linear between 0 and 90 degrees pitch, so if you pitch up 45 degrees, the farthest the roll sensor can be from the horizon is 45 degrees
+[3:32 AM] jbaker96 (Boeing Autopilot): to solve that you have to plug both the pitch angle and the roll angle through an equation to correct the roll angle so it is relative to the aircraft instead of the horizon
+[3:35 AM] jbaker96 (Boeing Autopilot): all you have to do is convert your pitch angle from a forward facing tilt sensor into degrees by multiplying it by 360, then plug it into the y value of a function block, and plug the roll sensor directly into the x value of the function block and use this (asin((sin(x*pi2))/(sin((90-y)*(pi/180)))))*(180/pi) then take the output of that and use that for your roll angle input in the picture i posted
+[3:36 AM] jbaker96 (Boeing Autopilot): and that output is in degrees
+[3:40 AM] Ritty: Mmm. I appreciate the equation but I don't like using things I don't fully understand and I've now actually gotten the velocity pivot sensor working great
+[3:41 AM] Ritty: It needs some fine tuning on the PID, but otherwise it does exactly what I want it to
+[3:41 AM] jbaker96 (Boeing Autopilot): thats a wonky and overly complicated way of solving a simple problem but whatever floats your boat
+[3:42 AM] Ritty: PID + velocity pivot actually isn't complicated at all, but okay.
+[3:42 AM] jbaker96 (Boeing Autopilot): its moving parts
+[3:42 AM] jbaker96 (Boeing Autopilot): adds complexity to a vehicle and more places for things to go wrong
+[3:43 AM] Ritty: I'm sure a 1x1x2 spinning block will cause me a lot of problems
+[3:43 AM] jbaker96 (Boeing Autopilot): takes up more space than a function block in an mc too
+[3:44 AM] jbaker96 (Boeing Autopilot): all im sayin is you could get perfectly accurate results not just really close results while not worrying about any potential issues no matter how small
+
+--]]
