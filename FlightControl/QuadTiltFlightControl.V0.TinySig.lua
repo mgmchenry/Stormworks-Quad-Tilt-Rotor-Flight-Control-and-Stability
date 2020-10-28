@@ -1,6 +1,6 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
--- Signals Refactor
--- VT 0.T11.24a Michael McHenry 2020-10-19
+-- TinySignals Refactor
+-- VT 0.T11.24a Michael McHenry 2020-10-27
 -- Minifies to 3988 characters as of S11.22d
 -- Minifies to 3762 characters as of S11.22e 2020-10-18
 -- Minifies to 4102 characters as of S11.23a 2020-10-19
