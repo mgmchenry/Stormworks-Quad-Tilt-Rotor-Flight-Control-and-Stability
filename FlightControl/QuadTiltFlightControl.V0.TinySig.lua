@@ -2,11 +2,12 @@
 -- Signals Refactor
 -- VT 0.T11.24a Michael McHenry 2020-10-19
 -- Minifies to 3988 characters as of S11.22d
--- Minifies to 3762 characters as of S11.22e
--- Minifies to 4102 characters as of S11.23a
--- Minifies to 4072 characters as of S11.23b
--- Minifies to 4054 characters as of S11.23c
--- Minifies to 3981 characters as of S11.23e
+-- Minifies to 3762 characters as of S11.22e 2020-10-18
+-- Minifies to 4102 characters as of S11.23a 2020-10-19
+-- Minifies to 4072 characters as of S11.23b 2020-10-19
+-- Minifies to 4054 characters as of S11.23c 2020-10-20
+-- Minifies to 3981 characters as of S11.23e 2020-10-23
+-- Minifies to 3547 characters as of T11.24a 2020-10-27
 sourceVT1124a="repl.it/@mgmchenry"
 
 local G, prop_getText, gmatch, unpack
@@ -46,7 +47,12 @@ function(text, local_returnVals)
   end
   return unpack(local_returnVals)
 end
+--[[
+getTableValues, stringUnpack =  
+function(c,d,e,f)e={}for g in d do f=c;for h in gmatch(g,'([^. ]+)')do f=f[h]end;e[#e+1]=f end;return unpack(e)end,function(i,e)e={}for j in gmatch(i,commaDelimited)do e[#e+1]=j end;return unpack(e)end
 
+local a,b,c,d,e,f,g,h=_ENV,property.getText,string.gmatch,table.unpack,"Ark",'([^,\r\n]+)',false;local i,j=function(k,l,m,n)m={}for o in l do n=k;for p in c(o,'([^. ]+)')do n=n[p]end;m[#m+1]=n end;return d(m)end,function(q,m)m={}for r in c(q,f)do m[#m+1]=r end;return d(m)end
+--]]
 
 --[[
 propValues["Ark0"] =
@@ -182,12 +188,11 @@ t_tokenList
 ,f_pRun
 ] ])
 __debug.AlertIf(f_pRun~="f_pRun", "missing tokens - tokenList/pRun:", t_tokenList, f_pRun)
-__debug.AlertIf(f_pRun~="f_pRun" and {f_sAssignValues, f_sGetValues, f_sNewSignalSet, f_sAdvanceBuffer, f_sGetSmoothedValue, f_sAddSignals})
 __debug.AlertIf(f_pRun~="f_pRun" and {t_Value, t_Velocity, t_Accel, t_targetValue, t_targetVel, t_targetAccel, t_buffers, t_modPeriod, t_modOffset, t_OutValue})
 __debug.AlertIf(f_pRun~="f_pRun" and justDie())
 --]]
 --__debug.AlertIf(not f_pRun and justDie()) -- make sure last token requested was assigned
-__debug.AlertIf(not f_pRun=="token_".._tokenId and justDie()) -- make sure last token requested was assigned
+--__debug.AlertIf(not f_pRun=="token_".._tokenId and justDie()) -- make sure last token requested was assigned
 
 function tableValuesAssign(container, indexList, values)
   container = container or {}
@@ -221,9 +226,7 @@ local bufferLength, bufferPosition
 function processingLogic()
   local this
     , compositeInSignalChannels
-    --, compositeInSignalSet
     , compositeSignalNames
-    --, computedSignalSet
     , computedSignalNames
     , rotors
     , rotorSignalNames
@@ -254,7 +257,7 @@ function processingLogic()
     -- computed signal set (5 elements) 
     -- heading, sideDrift, forwardDrift, sideAcc, forwardAcc, rotorAltitude
     -- and I prob don't need heading
-    , --signalLogic[f_sNewSignalSet](6
+    , 
       {getTokens(6
       --[[
       , {"heading", "sideDrift", "forwardDrift", "sideAcc", "forwardAcc", "rotorAltitude"}
@@ -265,7 +268,7 @@ function processingLogic()
     , {}
 
 
-  -- index tokens for all 13 compositeInSignalSet elements:
+  -- index tokens for all 13 compositeInSignalNames:
   local t_pilotRoll, t_pilotPitch, t_pilotYaw, t_pilotUpdown
     , t_pilotAxis5, t_pilotAxis6
     , t_gpsX, t_gpsY, t_compass, t_tiltPitch, t_tiltRoll, t_tiltUp
@@ -273,8 +276,7 @@ function processingLogic()
     = unpack(compositeSignalNames)
 
   local t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc, t_rotorAltitude
-    = --unpack(computedSignalSet[t_tokenList])
-    unpack(computedSignalNames)
+    = unpack(computedSignalNames)
   
   
   function runRotorLogic(targetClimbAcc, targetPitchAcc, targetRollAcc, targetAlt)
@@ -489,20 +491,11 @@ function processingLogic()
 
 
   --[[
-    function f_sNewSignalSet - Returns a table of signals with initialized buffers
-
-    Return new set with x generic token signal names with default elements and buffer length:
-    f_sNewSignalSet(signalCount) 
-
-    or pass in a set of signal names:
-    f_sNewSignalSet(newSignalNames, newSignalElements, signalSet, bufferLength)
-    - if newSignalElements and bufferLength are nil, defaults will be used
-    - if an existing signalSet is passed in, it will be expanded with new signals
+    - if newSignalElements is nil, defaults will be used
   --]]
   addSignalNames = function(newSignalNames, newSignalElements, l_SetTokenList, l_newBuffers, l_newSignal)
     --__debug.AlertIf(isValidNumber(newSignalNames), "getting x signal tokens:", newSignalNames)
-    --__debug.AlertIf(not isValidNumber(newSignalNames), "assigning tokens:", unpack(newSignalNames) )
-
+    
     newSignalElements
       , signalTable    
 
@@ -540,19 +533,17 @@ function processingLogic()
         end
       end
     end
-
-    return signalSet
   end
 
-  advanceSignalBuffer = function(_localSignal, _localSignalElements)
+  advanceSignalBuffer = function(l_Signal, l_SignalElements)
     bufferPosition = moduloCorrect(bufferPosition + 1, bufferLength)
     
     for i,signalName in ipairz(signalTable[t_tokenList]) do
-      signal = signalTable[signalName]
-      signalElements = signal[t_signalElements] or defaultSignalElements
+      l_Signal = signalTable[signalName]
+      l_SignalElements = l_Signal[t_signalElements] or defaultSignalElements
       -- let's clear buffer values at this position
-      for ei, element in ipairz(signalElements) do
-        signal[t_buffers][element][bufferPosition] = empty
+      for ei, element in ipairz(l_SignalElements) do
+        l_Signal[t_buffers][element][bufferPosition] = empty
       end
     end
   end
@@ -593,7 +584,6 @@ function processingLogic()
       cascadeElement = cascadeMap[elementKey]
 
       if cascadeElement then
-        -- def: this[f_sGetSmoothedValue] = function(signalSet, signalKey, elementKey, smoothTicks, delayTicks)
         currentValue = getSmoothedValue(signalKey, elementKey, 4)
         -- smoothed over 4 ticks should be decent, 8 ticks ago
         previousValue = getSmoothedValue(signalKey, elementKey, 4, 8)
@@ -603,10 +593,7 @@ function processingLogic()
           ,signal[t_modPeriod],signal[t_modOffset]
           ) * ticksPerSecond / 8
 
-        --signal[cascadeElement] = delta
-        -- ^ doesn't cut it because velocity won't cascade to accel that way
-        -- so:
-        -- def: this[f_sAssignValues] = function(signalSet, values, elementKey, signalKeys)
+        -- propogate delta values to next element
         setSignalValues({delta}, {signalKey}, cascadeElement)        
       end
     end
@@ -657,7 +644,7 @@ function processingLogic()
       -- but split the value buffer retrieval into discrete steps for debugging purposes for now
       , 0 -- avg default. nil values will coalesce to 0
 
-    -- valueBuffer = signalSet[signalKey][t_buffers][elementKey]:
+    -- valueBuffer = signalTable[signalKey][t_buffers][elementKey]:
     valueBuffer = signal[t_buffers][elementKey]
 
     -- no more delay ticks than we have on hand. Leave room for one sample. minimum 0
@@ -720,11 +707,11 @@ end
 -- expanded below using signalLogic = signalLogic()
 --[[
 signal Set structure:
-signalSet = {
+signalTable = {
   t_tokenList = {yaw, pitch, roll, whatever}
   , t_bufferLength = 60ish
   , t_bufferPosition = 1
-  -- signals have a value element and derived elements like rate of change. I might include the element list in the signalSet in the future
+  -- signals have a value element and derived elements like rate of change. I might include the element list in the signalTable in the future
   , t_signalElements = {value, velocity, acceleration, etc?}
   -- the signal set table contains a signal table entry for each signal key from t_tokenList
   , yaw = {
