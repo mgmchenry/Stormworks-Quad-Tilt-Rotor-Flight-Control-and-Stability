@@ -9,17 +9,35 @@ table.unpack = table.unpack or unpack
 dofile("Stormworks_Stub.lua")
 
 propValues["BaseIndex"] = 1
+--[[
 propValues["Ark0"] =
-[[
+[ [
 string,math,input,output,property
 ,tostring,tonumber,ipairs,pairs
+,input.getNumber,input.getBool,output.setNumber
+] ]
+propValues["Ark1"] =
+[ [
+,math.abs,math.sin,math.cos,math.max,math.min
+,math.atan,math.sqrt,math.floor,math.pi
+] ] 
+--]]
+propValues["Ark0"] =
+[[
+string,math,input,output,property,screen
+,tostring,tonumber,ipairs,pairs,string.format
 ,input.getNumber,input.getBool,output.setNumber
 ]]
 propValues["Ark1"] =
 [[
+,screen.drawTextBox,screen.drawLine,screen.getWidth,screen.getHeight,screen.setColor
+]] 
+propValues["Ark2"] =
+[[
 ,math.abs,math.sin,math.cos,math.max,math.min
 ,math.atan,math.sqrt,math.floor,math.pi
 ]] 
+
 --dofile("QuadFlightControl.V0.07.15.lua")
 --dofile("ScaleController.V2.lua")
 --dofile("QuadFlightControl.V0.09.18.lua")

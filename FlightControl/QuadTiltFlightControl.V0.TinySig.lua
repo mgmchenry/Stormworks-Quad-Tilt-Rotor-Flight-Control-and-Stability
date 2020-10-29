@@ -1,14 +1,16 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
 -- TinySignals Refactor
--- VT 0.T11.24a Michael McHenry 2020-10-27
+-- VT 0.T11.24b Michael McHenry 2020-10-27
 -- Minifies to 3988 characters as of S11.22d
 -- Minifies to 3762 characters as of S11.22e 2020-10-18
 -- Minifies to 4102 characters as of S11.23a 2020-10-19
 -- Minifies to 4072 characters as of S11.23b 2020-10-19
 -- Minifies to 4054 characters as of S11.23c 2020-10-20
 -- Minifies to 3981 characters as of S11.23e 2020-10-23
--- Minifies to 3547 characters as of T11.24a 2020-10-27
-sourceVT1124a="repl.it/@mgmchenry"
+-- Minifies to 3547 characters as of T11.24a 2020-10-27 549 free
+-- Minifies to 3729 characters as of T11.24b 2020-10-27 397 free
+--  (added graphics functions)
+sourceVT1124b="repl.it/@mgmchenry"
 
 local G, prop_getText, gmatch, unpack
   , propPrefix
@@ -57,22 +59,28 @@ local a,b,c,d,e,f,g,h=_ENV,property.getText,string.gmatch,table.unpack,"Ark",'([
 --[[
 propValues["Ark0"] =
 [ [
-string,math,input,output,property
-,tostring,tonumber,ipairs,pairs
-,input.getNumber,input.getBool,output.setNumber
+string,math,input,output,property,screen
+,tostring,tonumber,ipairs,pairs,string.format
+,input.getNumber,input.getBool
 ] ]
 propValues["Ark1"] =
+[ [
+,output.setNumber
+,screen.drawTextBox,screen.drawLine,screen.getWidth,screen.getHeight,screen.setColor
+] ] 
+propValues["Ark2"] =
 [ [
 ,math.abs,math.sin,math.cos,math.max,math.min
 ,math.atan,math.sqrt,math.floor,math.pi
 ] ] 
 --]]
-local _string, _math, _input, _output, _property
-  , _tostring, _tonumber, ipairz, pairz
+local _string, _math, _input, _output, _property, _screen
+  , _tostring, _tonumber, ipairz, pairz, s_format
   , in_getNumber, in_getBool, out_setNumber
+  , drawTextBox, drawLine, s_getWidth, s_getHeight, setColor
   , abs, sin, cos, max, min
   , atan2, sqrt, floor, pi
-	= getTableValues(G,gmatch(prop_getText(propPrefix..0)..prop_getText(propPrefix..1), commaDelimited))
+	= getTableValues(G,gmatch(prop_getText(propPrefix..0)..prop_getText(propPrefix..1)..prop_getText(propPrefix..2), commaDelimited))
 
 -- sanity check that the function set loaded properly. Die on pi() if not
 --_ = floor(pi)~=3 and pi()
@@ -744,3 +752,82 @@ function onTick()
     processingLogic[f_pRun]()
 end
 
+
+--trunc(n) if n==nill then return "nil" end return string.format("%.f", n) end
+--function trunc2(n) if n==nill then return "nil" end return string.format("%.2f", n) end
+
+--[[
+function drawCircle(x,y,r,stp)
+    local xa,ya,xb,yb
+    stp=stp or 20
+    for i=1,stp do
+        xa=x-cos(pi*(i-1)/(stp/2))*r
+        ya=y-sin(pi*(i-1)/(stp/2))*r
+        xb=x-cos(pi*i/(stp/2))*r
+        yb=y-sin(pi*i/(stp/2))*r
+        screenDrawLine(xa,ya,xb,yb)
+    end
+end
+
+function drawArc(x,y,r,stp,a,b)
+    local xa,ya,xb,yb,inc
+    stp=stp or 20
+    inc=(b-a)/stp
+    for i=1,stp do
+        xa=x-sin(pi2*(i-1)*inc)*r
+        ya=y-cos(pi2*(i-1)*inc)*r
+        xb=x-sin(pi2*i*inc)*r
+        yb=y-cos(pi2*i*inc)*r
+        screenDrawLine(xa,ya,xb,yb)
+    end
+end
+
+function actualFreakingLineForFSake(x1,y1,x2,y2)
+  --local xAdj,yAdj =
+  --  ifVal(x2>x1,0.5, -0.5),
+  --  ifVal(y2>y1,0.5, -0.5)
+  --  screenDrawLine(x1-xAdj,y1-yAdj,x2+xAdj,y2+yAdj)
+  screenDrawLine(x1,y1,x2,y2)
+  screenDrawLine(x2,y2,x1,y1)
+end
+--]]
+
+function onDraw()
+	--if mcTick==nil then return false end -- safety
+	
+	w = s_getWidth()
+	h = s_getHeight()					
+	
+  local tickWidth, 
+    displayX, displayY, xa, ya, xb, yb, d2Offs, head,
+    xVel, yVel, xyVel, velAngle, xyFactor
+    = 5
+
+  xVel = 0--(buffers[bfXPos][bufferHead] - buffers[bfXPos][1]) * bufferDeltaPerSecond
+  yVel = 0--(buffers[bfYPos][bufferHead] - buffers[bfYPos][1]) * bufferDeltaPerSecond
+  velAngle = atan2(yVel, xVel) / pi2
+  head = 0--buffers[bfYaw][1] + 0.25
+
+  setColor(0, 0, 255)
+  --actualFreakingLineForFSake(displayX,displayY,displayX+xa,displayY+ya)
+
+  --drawCircle(displayX,displayY,tickWidth * 5,32)
+    
+  --[[
+	local function pVal(l,v)
+		if ty+10>h then
+			ty=10
+			tx=tx+tw*2.5
+		end
+		dtb(tx, ty, tw, 6, l, 1, 0)
+		dtb(tx+tw+4, ty, tw*2, 6, v, -1, 0)
+		ty=ty+6
+	end
+  --]]
+	
+	--tDiff=luaTick-mcTick
+	--pVal("State",state)
+	--pVal("TickDiff",trunc2(tDiff))
+
+	
+end
