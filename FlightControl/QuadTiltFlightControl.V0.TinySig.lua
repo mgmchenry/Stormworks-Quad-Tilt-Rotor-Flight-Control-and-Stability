@@ -1,6 +1,6 @@
 -- Stormworks Quad Tilt Rotor Flight Control and Stability
 -- TinySignals Refactor
--- VT 0.T11.24b Michael McHenry 2020-10-27
+-- VT 0.T11.24c Michael McHenry 2020-10-29
 -- Minifies to 3988 characters as of S11.22d
 -- Minifies to 3762 characters as of S11.22e 2020-10-18
 -- Minifies to 4102 characters as of S11.23a 2020-10-19
@@ -8,9 +8,10 @@
 -- Minifies to 4054 characters as of S11.23c 2020-10-20
 -- Minifies to 3981 characters as of S11.23e 2020-10-23
 -- Minifies to 3547 characters as of T11.24a 2020-10-27 549 free
--- Minifies to 3729 characters as of T11.24b 2020-10-27 397 free
+-- Minifies to 3729 characters as of T11.24b 2020-10-29 397 free
 --  (added graphics functions)
-sourceVT1124b="repl.it/@mgmchenry"
+--  also testSim https://lua.flaffipony.rocks/?id=GQF9zV7Rp
+sourceVT1124c="repl.it/@mgmchenry"
 
 local G, prop_getText, gmatch, unpack
   , propPrefix
@@ -216,6 +217,7 @@ end
 local bufferLength, bufferPosition
   , defaultSignalElements
   , signalTable, processingLogic
+  , graphInfo
   -- signal processing function names:
   , getSignalValues
   , setSignalValues
@@ -286,84 +288,6 @@ function processingLogic()
   local t_heading, t_sideDrift, t_forwardDrift, t_sideAcc, t_forwardAcc, t_rotorAltitude
     = unpack(computedSignalNames)
   
-  
-  function runRotorLogic(targetClimbAcc, targetPitchAcc, targetRollAcc, targetAlt)
-    for i=1,4 do    
-    
-      rotorSignalNames, rotorOutputNames = unpack(rotors[i])
-
-      local rotorInputChannels
-        , t_rAlt, t_rTiltPitch, t_rThrust
-        -- rotor sensors: rotor.alt, rotor.tilt, rotor.vel
-        , roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt
-        , climbThrustAdjust
-        = {i*3+6, i*3+7, i*3+8}
-        , unpack(rotorSignalNames)
-        
-      local
-        t_roTargetAcc, t_roRotorPitchOut, t_roPitch41G, t_roRotorTilt
-        = unpack(rotorOutputNames)
-
-      setSignalValues(getInputNumbers(rotorInputChannels), rotorSignalNames)
-
-      -- raw values from these signals:
-      local rAlt, rTilt, rVelocity, rAcc
-        = getSignalValues(rotorSignalNames)
-      
-      roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt
-        = getSignalValues(rotorOutputNames, t_OutValue)
-
-      rAcc 
-        = getSignalValues({t_rThrust}, t_Velocity)
-
-      --[[
-      rotorAngle = rotor.tilt * pi * 2
-			tiltThrustX = cos(rotorAngle)
-			tiltThrustY = sin(rotorAngle)
-			tiltThrustPctY = tiltThrustY / (tiltThrustX + abs(tiltThrustY))
-			climbThrustAdjust = 1 / tiltThrustY
-			-- so, if we knew the vertical thrust needed, total thrust would be:
-			-- local thrustNeeded = verticalThrustNeeded * climbThrustAdjust
-      --]]
-
-      climbThrustAdjust = 
-        -- 1 / tiltThrustY
-        -- 1 / sin(rotorAngle)
-        -- 1 / sin(rTilt * pi * 2)
-        ( 1 / sin(rTilt * pi * 2) )
-        * 
-        ( -- climb thrust diminishes with high rotor tilt
-          abs(rTilt) < 0.06 and 0
-          or abs(rTilt) < 0.11 and
-          --(
-            -- rotor angle is quite forward.
-            -- increasing thrust to gain altitude is likely to hurt more than it helps
-            -- Between 0.110 and 0.06, taper climbThrustAdjust down to zero
-            max(abs(rTilt)-0.06,0) * (1/0.05)
-            
-            -- Wolfram alpha graph: Plot[{Sin[2 Pi x/360], 1/Sin[2 Pi x/360],Min[{1/Sin[2 Pi x/360], 1.66}],Min[{1, Max[{0, Abs[x/360]-0.06}] * (1/(0.110-0.06)) }], Min[{1, Max[{0, Abs[x/360]-0.06}] * (1/(0.110-0.06)) }] * 1/Sin[2 Pi x/360]}, {x, -90, 90}]
-          --)
-          or 1
-        )
-      
-      roTargetAcc = (targetClimbAcc
-      + targetPitchAcc 
-      --rotorAxisPolarity = negativeOneIf(i < 3)
-      * ifVal(i<3, -1, 1)
-      ) * climbThrustAdjust
-      
-      roRotorPitchOut = clamp((roRotorPitchOut or 0) + (roTargetAcc - rAcc) / 20 / ticksPerSecond, -1, 1)
-
-      roRotorTilt = 0
-
-      setSignalValues({roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt}, rotorOutputNames, t_OutValue)
-
-      out_setNumber(i,roRotorPitchOut)
-      out_setNumber(i+4,roRotorTilt)
-    end
-
-  end
-
   -- processing.run() function:
   this[f_pRun] = function()
     --signalLogic[f_sAssignValues](
@@ -457,15 +381,15 @@ function processingLogic()
     altClimbRateSoon = altClimbRate + altClimbAcc * soon
     altSoon = sRotorAlt + (altClimbRate + altClimbRateSoon) / 2 * soon
 
+    altClimbRateTarget = pilotUpdown * 10
     altTarget = 
       sRotorAlt~=0 and abs(pilotUpdown)+abs(pilotPitch)>0.03 and (
       -- there is nonZero rotor alt and pilot input - update altTarget
-        altSoon
+        altSoon + altClimbRateTarget * soon
       ) or -- we have zero alt reading from rotors
         altTarget
 
 
-    altClimbRateTarget = pilotUpdown * 10
     --[[
       abs(pilotUpdown)>0.3 and pilotUpdown * 10
       or altTarget and sRotorAlt and clamp((altTarget - sRotorAlt) / soon / 2,-10,10)
@@ -474,11 +398,98 @@ function processingLogic()
 
     targetClimbAcc = (altClimbRateTarget - altClimbRateSoon) / soon
 
+    --[[
     runRotorLogic(
       targetClimbAcc
       , pilotPitch -- - sTiltPitch
       , pilotRoll
       , altTarget)
+    --]]
+
+    
+    --function runRotorLogic(targetClimbAcc, targetPitchAcc, targetRollAcc, targetAlt)
+    for i=1,4 do    
+    
+      rotorSignalNames, rotorOutputNames = unpack(rotors[i])
+
+      local rotorInputChannels
+        , t_rAlt, t_rTiltPitch, t_rThrust
+        -- rotor sensors: rotor.alt, rotor.tilt, rotor.vel
+        , roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt
+        , climbThrustAdjust
+        = {i*3+6, i*3+7, i*3+8}
+        , unpack(rotorSignalNames)
+        
+      local
+        t_roTargetAcc, t_roRotorPitchOut, t_roPitch41G, t_roRotorTilt
+        = unpack(rotorOutputNames)
+
+      graphInfo = graphInfo or {
+        {t_roRotorPitchOut, t_OutValue, {1,0,0}, -1, 2}
+        ,{t_roTargetAcc, t_OutValue, {0,1,0}, -20, 40}
+        ,{t_rAlt, t_Accel, {0,0,1}, -20, 40}
+      }
+
+      setSignalValues(getInputNumbers(rotorInputChannels), rotorSignalNames)
+
+      -- raw values from these signals:
+      local rAlt, rTilt, rVelocity, rAcc
+        = getSignalValues(rotorSignalNames)
+      
+      roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt
+        = getSignalValues(rotorOutputNames, t_OutValue)
+
+      rAcc 
+        = getSignalValues({t_rThrust}, t_Velocity)
+
+      --[[
+      rotorAngle = rotor.tilt * pi * 2
+			tiltThrustX = cos(rotorAngle)
+			tiltThrustY = sin(rotorAngle)
+			tiltThrustPctY = tiltThrustY / (tiltThrustX + abs(tiltThrustY))
+			climbThrustAdjust = 1 / tiltThrustY
+			-- so, if we knew the vertical thrust needed, total thrust would be:
+			-- local thrustNeeded = verticalThrustNeeded * climbThrustAdjust
+      --]]
+
+      climbThrustAdjust = 
+        -- 1 / tiltThrustY
+        -- 1 / sin(rotorAngle)
+        -- 1 / sin(rTilt * pi * 2)
+        ( 1 / sin(rTilt * pi * 2) )
+        * 
+        ( -- climb thrust diminishes with high rotor tilt
+          abs(rTilt) < 0.06 and 0
+          or abs(rTilt) < 0.11 and
+          --(
+            -- rotor angle is quite forward.
+            -- increasing thrust to gain altitude is likely to hurt more than it helps
+            -- Between 0.110 and 0.06, taper climbThrustAdjust down to zero
+            max(abs(rTilt)-0.06,0) * (1/0.05)
+            
+            -- Wolfram alpha graph: Plot[{Sin[2 Pi x/360], 1/Sin[2 Pi x/360],Min[{1/Sin[2 Pi x/360], 1.66}],Min[{1, Max[{0, Abs[x/360]-0.06}] * (1/(0.110-0.06)) }], Min[{1, Max[{0, Abs[x/360]-0.06}] * (1/(0.110-0.06)) }] * 1/Sin[2 Pi x/360]}, {x, -90, 90}]
+          --)
+          or 1
+        )
+      
+      roTargetAcc = (targetClimbAcc
+      --+ targetPitchAcc 
+      + pilotPitch -- - sTiltPitch
+      --rotorAxisPolarity = negativeOneIf(i < 3)
+      * ifVal(i<3, -1, 1)
+      ) * climbThrustAdjust
+      
+      roRotorPitchOut = clamp((roRotorPitchOut or 0) + (roTargetAcc - rAcc) / 20 / ticksPerSecond, -1, 1)
+
+      roRotorTilt = 0
+
+      setSignalValues({roTargetAcc, roRotorPitchOut, roPitch41G, roRotorTilt}, rotorOutputNames, t_OutValue)
+
+      out_setNumber(i,roRotorPitchOut)
+      out_setNumber(i+4,roRotorTilt)
+    end
+    -- End rotor logic loop
+
 
 
     --for i=1, #outVars do
@@ -746,12 +757,31 @@ processingLogic = processingLogic()
 
 
 function onTick()
+	--__debugSimulate()
   -- abort if 
 	return in_getNumber(1)
     and	
     processingLogic[f_pRun]()
 end
 
+--[[
+local sim = {}
+sim.alt = 10.2
+
+function __debugSimulate()
+	
+	
+	rotorAlts = {9,12,15,18}
+    --for i=1, #outVars do
+    for i,v in ipairz( 
+      {
+      	sim.alt, sim.alt, sim.alt, sim.alt
+      }) do
+      devinput.setNumber(rotorAlts[i], v)
+      --tonumber( string.format("%.4f", v) ))
+    end
+end
+--]]
 
 --trunc(n) if n==nill then return "nil" end return string.format("%.f", n) end
 --function trunc2(n) if n==nill then return "nil" end return string.format("%.2f", n) end
@@ -809,6 +839,25 @@ function onDraw()
   head = 0--buffers[bfYaw][1] + 0.25
 
   setColor(0, 0, 255)
+
+  --[[
+      graphInfo = graphInfo or {
+        {t_roRotorPitchOut, t_OutValue, {1,0,0}, -1, 2}
+        ,{t_roTargetAcc, t_OutValue, {0,1,0}, -20, 40}
+        ,{t_rAlt, t_Accel, {0,0,1}, -20, 40}
+      }
+  --]]
+  for i,lineDef in ipairz(graphInfo) do
+    lKey, lElement, lColor, lMin, lRange = unpack(lineDef)
+    --lRange = lMax - lMin
+    --getSmoothedValue = function(signalKey, elementKey, smoothTicks, delayTicks)
+    lVal0 = clamp((getSmoothedValue(lKey, lElement, 1, 0) - lMin)/lRange,0,1)
+    lVal1 = clamp((getSmoothedValue(lKey, lElement, 1, 1) - lMin)/lRange,0,1)
+
+  end
+
+
+
   --actualFreakingLineForFSake(displayX,displayY,displayX+xa,displayY+ya)
 
   --drawCircle(displayX,displayY,tickWidth * 5,32)

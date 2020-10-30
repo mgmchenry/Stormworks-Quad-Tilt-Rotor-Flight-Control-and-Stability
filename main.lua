@@ -82,3 +82,5 @@ inValues[29] = 80
 
 runTest(function() onTick() end, "onTick")
 runTest(function() onDraw() end, "onDraw")
+
+--os.execute("clear")
