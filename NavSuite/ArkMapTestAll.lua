@@ -1,4 +1,3 @@
---[[
 map.mapToScreen =
 function(mapX, mapY, zoom, screenW, screenH, worldX, worldY)
   screenW = math.max(screenW, 1)
@@ -17,77 +16,48 @@ function(mapX, mapY, zoom, screenW, screenH, pixelX, pixelY)
   worldX, worldY = (pixelX - screenW / 2) * zoom + mapX, (screenH / 2 - pixelY) * zoom + mapY
   return worldX, worldY
 end
+
+
+M=math
+si=M.sin
+co=M.cos
+pi=M.pi
+local abs, min, max, sqrt, unpack
+  = M.abs, M.min, M.max, M.sqrt
+  , table.unpack
+
+S=screen
+C=S.setColor
+dL=S.drawLine
+local drawCircle, drawCircleF
+  , screenToMap, mapToScreen
+  = S.drawCircle, S.drawCircleF
+  , map.screenToMap, map.mapToScreen
+dRF=S.drawRectF
+dTF=S.drawTriangleF
+dTx=S.drawText
+dTxB=S.drawTextBox
+
+--[[
+function mapToScreen(mapX, mapY, zoom, screenW, screenH, worldX, worldY)
+    screenW = math.max(screenW, 1)
+    screenH = math.max(screenH, 1)
+    zoom = math.min(math.max(zoom, 0.1), 50) * 1000 / screenW
+    return (worldX - mapX) / zoom + screenW / 2, screenH / 2 - (worldY - mapY) / zoom
+end
+function screenToMap(mapX, mapY, zoom, screenW, screenH, pixelX, pixelY)
+    screenW = math.max(screenW, 1)
+    screenH = math.max(screenH, 1)
+    zoom = math.min(math.max(zoom, 0.1), 50) * 1000 / screenW
+    return (pixelX - screenW / 2) * zoom + mapX, (screenH / 2 - pixelY) * zoom + mapY
+end
 --]]
 
--- Stormworks Ark NavSuite MapUI Controller
--- V 01.01a Michael McHenry 2020-11-10
--- Pony IDE testSim https://lua.flaffipony.rocks/?id=_uM_iSyvu
-source={"ArkNav01x01a","repl.it/@mgmchenry"}
+I=input
+O=output
 
-local G, prop_getText, gmatch, unpack
-  , propPrefix
-  , commaDelimited
-  , empty, nilzies
-  -- nilzies not assigned by design - it's just nil but minimizes to one letter
-
-	= _ENV, property.getText, string.gmatch, table.unpack
-  , "Ark"
-  , '([^,\r\n]+)'
-  , false
-
-local getTableValues, stringUnpack 
-= 
-function(container, iterator, local_returnVals, local_context)
-	local_returnVals = {}
-	for key in iterator do
-    local_context = container
-    --__debug.AlertIf({"key["..key.."]"})
-    for subkey in gmatch(key,'([^. ]+)') do
-      --__debug.AlertIf({"subkey["..subkey.."]"})
-      local_context = local_context[subkey]
-      --__debug.AlertIf({"context:", string.sub(tostring(local_context),1,20)})
-    end
-    local_returnVals[#local_returnVals+1] = local_context
-	end
-	return unpack(local_returnVals)
-end
-, -- stringUnpack
-function(text, local_returnVals)
-  local_returnVals = {}
-  --__debug.AlertIf({"stringUnpack text:", text})
-  for v in gmatch(text, commaDelimited) do
-    --__debug.AlertIf({"stringUnpack value: ("..v..")"})
-    local_returnVals[#local_returnVals+1]=v
-  end
-  return unpack(local_returnVals)
-end
-
-local M, S, I, O
-  --= math, screen
-  = getTableValues(G,gmatch("math,screen,input,output", commaDelimited))
-
-local abs, min, max, sqrt
-  , si, co, pi
-  = getTableValues(M,gmatch("abs,min,max,sqrt,sin,cos,pi", commaDelimited))
-  
-local C, dL, drawCircle, drawCircleF
-  , dRF, dTF, dTx, dTxB
-  
-  = getTableValues(S,gmatch("setColor,drawLine,drawCircle,drawCircleF, drawRectF,drawTriangleF,drawText,drawTextBox", commaDelimited))
-
-local screenToMap, mapToScreen
-  , getBool
-  , format
-
-  , clamp, getN, outN
-  = map.screenToMap, map.mapToScreen
-  , I.getBool
-  , string.format
-
-
-function clamp(a,b,c) return M.min(M.max(a,b),c) end
-function getN(...)local a={}for b,c in ipairs({...})do a[b]=I.getNumber(c)end;return unpack(a)end
-function outN(o, ...) for i,v in ipairs({...}) do O.setNumber(o+i-1,v) end end
+tU=table.unpack
+F=string.format
 
 local zoom, tz, zooms
   , grids, grid
@@ -100,6 +70,7 @@ local zoom, tz, zooms
   , outDis, outCourse
 
   , beaconRadius
+  , clamp
 
   = 1, 5*32*0.11, {0.3,2,5,10,30,50}
   , {10,100,500,1000,2500,5000}, 100
@@ -122,31 +93,103 @@ wp = {}
 sel = 0
 --]]
 
+local getBool
+  = I.getBool
 
 function dPoi(xx,yy,s,r,...) 
-  local a,x,y=...,0,0 a=(a or 30)*pi/360;
-  x=xx+s/2*si(r);
-  y=yy-s/2*co(r);
-  xx=xx-s/4*si(r);
-  yy=yy+s/4*co(r);
-  dTF(xx,yy,x,y,x-s*si(r+a),y+s*co(r+a))
-  dTF(xx,yy,x,y,x-s*si(r-a),y+s*co(r-a)) 
+local a,x,y=...,0,0 a=(a or 30)*pi/360;
+x=xx+s/2*si(r);
+y=yy-s/2*co(r);
+xx=xx-s/4*si(r);
+yy=yy+s/4*co(r);
+dTF(xx,yy,x,y,x-s*si(r+a),y+s*co(r+a))
+dTF(xx,yy,x,y,x-s*si(r-a),y+s*co(r-a)) 
+end
+function clamp(a,b,c) return M.min(M.max(a,b),c) end
+function getN(...)local a={}for b,c in ipairs({...})do a[b]=I.getNumber(c)end;return tU(a)end
+function outN(o, ...) for i,v in ipairs({...}) do O.setNumber(o+i-1,v) end end
+
+local beaconPings, lastPingIndex, maxPings, hotSpots
+  , hotSpotMaxScore
+  , beaconPulse, lastBeaconPulse, lastBeaconDistance, beaconQuietCounter
+
+  , getCircleIntersections, addBeaconPing
+
+  = {}, 0, 10, {}
+  , 1
+  , false, false, 0, 0
+
+
+getCircleIntersections = function (x1,y1,r1,x2,y2,r2)
+  local distance
+    , aSide, oSide, aX, aY, oX, oY
+    = sqrt((x1-x2)^2 + (y1-y2)^2)
+
+  if distance>r1+r2 then return end
+
+  -- distance from xy1 to xy2 = aSide+bSide. 
+  -- aSide is distance from xy1 to intersection line. 
+  -- b is distance from xy2 to intersection line
+  -- from xy1, h = hypotenuse = r1
+  -- aSide is adjacent side of right triangle
+  -- oSide is opposite side or right triangle. Intersections are at +/- o
+  aSide = (r1^2 - r2^2 + distance^2) / distance / 2
+  oSide = sqrt(r1^2 - aSide^2)
+  aX = x1 + (x2-x1) * aSide / distance
+  aY = y1 + (y2-y1) * aSide / distance
+
+  oX = ( y1 - y2 ) * oSide / distance
+  oY = ( x2 - x1 ) * oSide / distance
+
+  return {aX+oX,aY+oY}, {aX-oX,aY-oY}
 end
 
+addBeaconPing = function(gpsX,gpsY,distance)
+  lastPingIndex = (lastPingIndex % maxPings) + 1
 
-local beaconPulse, lastBeaconPulse, lastBeaconDistance, beaconQuietCounter
-  , debug_beaconRadius -- beaconRadius is just for debug purposes
+  local newPing 
+    , x1, y1, r1, h1, h2
+    , score, hsDistance
+    = {gpsX, gpsY, distance}
+  beaconPings[lastPingIndex] = newPing
 
-  = false, false, 0, 0
+  hotSpots, hotSpotMaxScore = {}, 1
+  for b1 = 1, #beaconPings do
+    x1, y1, r1
+      = unpack(beaconPings[b1])
+    for b2 = b1+1, #beaconPings do
+      --local x2, y2, r2 = unpack(beaconPings[b2])
+      h1, h2 = getCircleIntersections(x1, y1, r1, unpack(beaconPings[b2]))      
+      
+      -- if h1 is nil, the array length doesn't increase anyway
+      hotSpots[#hotSpots+1] = h1
+      hotSpots[#hotSpots+1] = h2
+    end
+  end
+  for i, hotSpot in ipairs(hotSpots) do
+    score = 0
+    for i2, ping in ipairs(beaconPings) do
+      hsDistance = ping[3] - sqrt(
+        (ping[1]-hotSpot[1])^2 
+        + (ping[2]-hotSpot[2])^2)
+      score = score + max(0, 1 - abs(hsDistance/200))^3
+    end
+    hotSpot[3] = score^2
+    hotSpotMaxScore = max(score^2, hotSpotMaxScore)
+  end
+end
+
+addBeaconPing(100,100,3000)
+addBeaconPing(0,3000,2300)
+addBeaconPing(3000,0,2300)
 
 function onTick()  
 
-	t2 = getBool(1) -- also getBool(2) for touch 2
-	W,H,tx,ty,tx2,ty2
-    , gx,gy,gz,dir,swp -- 11-15
+	t2 = getBool(1)
+	W,H,tx,ty,gx,gy,gz,dir,swp
     , inputX, inputY
     , beaconRadius
-     = getN(1,2,3,4,5,6,11,12,13,14,15,16,17,18)
+     = getN(1,2,3,4,11,12,13,14,15,16,17,18)
 	if gx == nil then return true end
 	if wx == nil then 
     if gx==0 then return true end 
@@ -161,6 +204,7 @@ function onTick()
 		beaconQuietCounter = 0   
 
     lastBeaconDistance = beaconRadius
+    addBeaconPing(inputX, inputY, lastBeaconDistance)
   end
   lastBeaconPulse = beaconPulse
 	O.setBool(20,beaconPulse)
@@ -272,9 +316,6 @@ function onDraw()
 	x1 = M.floor(x1/grid)*grid
 	y1 = M.floor(y1/grid)*grid
 	
-  
-  --meterPixels = (mapToScreen(0, 0, zo, w, h, 1000, 0) - w/2) / 1000
-
 	C(0,0,0,20)
 	for xx=x1,x2,grid do
 		x,y = mapToScreen(mx,my,zo, w,h, xx,y1)
@@ -297,12 +338,12 @@ function onDraw()
     dRF(0,homeButtonHeight,8,h)
     dRF(58,h-19,45,16)
     dRF(11,h-19,45,16)
-    dTxB(105,h-19,w-110,15,format("grid:%.0f  scale:%.1f",grid,zo),-1,1)
+    dTxB(105,h-19,w-110,15,F("grid:%.0f  scale:%.1f",grid,zo),-1,1)
 
     C(255,150,0)
     dL(1,tz+homeButtonHeight,7,tz+homeButtonHeight)
-    dTxB(105,h-20,w-110,15,format("grid:%.0f  scale:%.1f",grid,zo),-1,1)
-    dTxB(thereBoxX,h-20,45,15,format("x:%.0f\ny:%.0f",wx,wy),-1,1)
+    dTxB(105,h-20,w-110,15,F("grid:%.0f  scale:%.1f",grid,zo),-1,1)
+    dTxB(thereBoxX,h-20,45,15,F("x:%.0f\ny:%.0f",wx,wy),-1,1)
 
     -- draw home button in green (gps follow) or grey(click for gps follow)
 		C(0,sel==0 and 150 or 0,0,220)
@@ -342,9 +383,9 @@ function onDraw()
 
   lh = M.atan(lx-gx,ly-gy) / pi / -2
   outCourse = ((dir-lh+.5)%1-.5)*360
-  --dTx(13,14,format("th:%.2f\ngh:%.2f", lh, dir))
+  --dTx(13,14,F("th:%.2f\ngh:%.2f", lh, dir))
   outDis = sqrt((gx-lx)^2 + (gy-ly)^2)
-  dTx(13,h-26,format("d:%.0f c:%.0f",outDis,outCourse))
+  dTx(13,h-26,F("d:%.0f c:%.0f",outDis,outCourse))
 
   if w==W then
     C(0,0,0,50)
@@ -359,7 +400,7 @@ function onDraw()
     dL(cx,cy+6,cx,h)
     C(200,0,0)
 
-    dTxB(hereBoxX,h-20,45,15,format("x:%.0f\ny:%.0f",gx,gy),-1,1)
+    dTxB(hereBoxX,h-20,45,15,F("x:%.0f\ny:%.0f",gx,gy),-1,1)
   end
 
 	i = 1
@@ -388,5 +429,36 @@ function onDraw()
 		dL(i*13-1,6,6+i*13,6)
 		dL(2+i*13,3,2+i*13,10)
 	end
+
+  meterPixels = (mapToScreen(0, 0, zo, w, h, 1000, 0) - w/2) / 1000
+
+  if inputX and inputY then
+    C(200,0,0)
+    bx,by = mapToScreen(mx,my,zo,w,h,inputX,inputY)
+    br = 5
+    drawCircle(bx,by,br)
+    drawCircle(bx,by,beaconRadius*meterPixels)
+  end
+
+  for bi = 1, #beaconPings do
+
+    local freshness
+      , pingX, pingY, pingR
+      = (5 - (lastPingIndex - bi) % maxPings) / 6
+      , unpack(beaconPings[bi])
+
+    C(200,0,0,max(freshness,0)^2 * 200)
+    pingX, pingY = mapToScreen(mx,my,zo,w,h,pingX,pingY)
+    drawCircle(pingX,pingY,3)
+    drawCircle(pingX,pingY,pingR*meterPixels)
+  end
+
+  for bi = 1, #hotSpots do
+    local pingX, pingY, score = unpack(hotSpots[bi])
+    score = (score/hotSpotMaxScore)^2
+    C(200,200,0,100 * score)
+    pingX, pingY = mapToScreen(mx,my,zo,w,h,pingX,pingY)
+    drawCircleF(pingX,pingY, 8 * score - 2)
+  end
 
 end
