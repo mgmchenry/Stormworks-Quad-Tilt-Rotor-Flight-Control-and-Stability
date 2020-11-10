@@ -1,3 +1,6 @@
+-- radar target mass =
+-- Signal strength = Target Mass / Target Distance
+
 --http://lua-users.org/wiki/StringRecipes
 --Iterate over words in a string (adapted from Lua manual)
 -- words and numbers
@@ -98,6 +101,31 @@ function getConfig(text, configTable)
   print(tonumber(hexByte,16))
 end
 
+--interpreting axis inputs as button presses:
+--https://discord.com/channels/357480372084408322/578586360336875520/773338162620661782
+--quale
+local channels = {}
+local sensitivityValues = {40,30,20,10}
+
+for i = 1, 4 do
+    channels[i] = {value=0, unsmoothed=0, smoothed=0, sensitivity=sensitivityValues[i]^2}
+end
+
+function onTick()
+    for i, c in ipairs(channels) do
+        local current = input.getNumber(i)
+        c.unsmoothed = c.value + (current - c.value) / c.sensitivity
+        c.value = current
+        c.smoothed = (c.smoothed*9 + current) / 10
+    end
+end
+
+function onDraw()
+    for i, c in ipairs(channels) do
+        screen.drawText(0, 10 * i - 5, string.format('%+.2f', c.value))
+        screen.drawText(15, 10 * i - 5, string.format('%+.2f', c.unsmoothed))
+    end
+end
 
 --[[
 jbaker roll correction discussion:
@@ -174,3 +202,38 @@ https://discord.com/channels/357480372084408322/525362818455699457/6835931746225
 [3:44 AM] jbaker96 (Boeing Autopilot): all im sayin is you could get perfectly accurate results not just really close results while not worrying about any potential issues no matter how small
 
 --]]
+
+
+--[[
+Intersection of two circles
+Attempt 1 based on intercept angle:
+https://www.desmos.com/calculator/fqxhrg2pzh
+Attempt 2 with arbitrary x/y:
+https://www.desmos.com/calculator/xnbtj957gg
+
+also good:
+https://stackoverflow.com/questions/3349125/circle-circle-intersection-points
+
+Desmos 3d plot fun:
+https://www.desmos.com/calculator/ongcgqgcpr
+
+--]]
+
+function getIntersections(x1,y1,r1,x2,y2,r2)
+  distance = sqrt((x1-x2)^2 + (y1-y2)^2)
+  -- distance from xy1 to xy2 = aSide+bSide. 
+  -- aSide is distance from xy1 to intersection line. 
+  -- b is distance from xy2 to intersection line
+  -- from xy1, h = hypotenuse = r1
+  -- aSide is adjacent side of right triangle
+  -- oSide is opposite side or right triangle. Intersections are at +/- o
+  aSide = (r1^2 - r2^2 + distance^2) / distance / 2
+  oSide = sqrt(r1^2 - aSide^2)
+  aX = x1 + (x2-x1) * aSide / distance
+  aY = y1 + (y2-y1) * aSide / distance
+
+  oX = ( y1 - y2 ) * oSide / distance
+  oY = ( x2 - x1 ) * oSide / distance
+
+  return {aX+oX,aY+oY}, {aX-oX,aY-oY}
+end

@@ -1,5 +1,12 @@
 _ENV = _G
 
+-- why is repl.it on Lua 5.1 still?
+pack = pack or function(...)
+  return { n = select("#", ...), ... }
+end
+
+table.pack = table.pack or pack
+
 __debug = {
   AlertIf = function (condition, ...)
     if condition then
@@ -73,23 +80,33 @@ local function f(name, func)
       message = message..")"
       print(message)
     end
-    local result = nil
-    if func~=nil then
-      result = func(...)
+    local result, resultPack = nil
+    if func==nil then
+      return
     end
-    if result~=nil then
-      local rString, sVal = type(result), "<???>"
-      if type(result) == "string" then
-        sVal = "("..result..")"
-      elseif type(result) == "boolean" then
-        sVal = "(".. (result and "true" or "false") ..")"
-      elseif type(result) == "number" then
-        sVal = "("..string.format(result)..")"
+    resultPack = table.pack(func(...))
+    if resultPack==nil then
+      print("resultPack is nil")
+    else
+      if resultPack.n==nil then
+        print("resultPack has no n")
+        print(resultPack)
       end
+      for i=1, resultPack.n do
+        result = resultPack[i]
+        local rString, sVal = type(result), "<???>"
+        if type(result) == "string" then
+          sVal = "("..result..")"
+        elseif type(result) == "boolean" then
+          sVal = "(".. (result and "true" or "false") ..")"
+        elseif type(result) == "number" then
+          sVal = "("..string.format(result)..")"
+        end
 
-      print(" --> return "..rString..sVal)
+        print(" --> return "..rString..sVal)
+      end
     end
-    return result
+    return unpack(resultPack)
   end
   return dummyF
 end
@@ -105,6 +122,7 @@ output = {
 }
 screen = {
   drawTextBox=f("drawTextBox"),
+  drawText=f("drawText"),
   setColor=f("setColor"),
   getWidth=f("getWidth", function() return 98 end),
   getHeight=f("getHeight", function() return 98 end),
@@ -113,6 +131,16 @@ screen = {
   drawClear=f("drawClear"),
   drawTriangleF=f("drawTriangleF"),
   drawTriangle=f("drawTriangle")
+  , drawCircle=f("drawCircle") --x, y, radius
+  , drawCircleF=f("drawCircleF") --x, y, radius
+
+  , setMapColorOcean=f("setMapColorOcean")
+	, setMapColorShallows=f("setMapColorShallows")
+	, setMapColorLand=f("setMapColorLand")
+	, setMapColorGrass=f("setMapColorGrass")
+	, setMapColorSand=f("setMapColorSand")
+	, setMapColorSnow=f("setMapColorSnow")
+  , drawMap=f("drawMap")
 }
 propValues = {}
 property = {
@@ -122,6 +150,12 @@ property = {
   , getText=f("getText", function(key) 
     return propValues[key] 
   end)
+}
+map = {
+  -- vx,vy = MS(mx,my,zo,w,h,gx,gy)
+  mapToScreen=f("mapToScreen", function() return 0,0 end)
+  -- SM(mx,my, zo, w,h, 0,h)
+  ,screenToMap=f("screenToMap", function() return 0,0 end)
 }
 
 function onTick()

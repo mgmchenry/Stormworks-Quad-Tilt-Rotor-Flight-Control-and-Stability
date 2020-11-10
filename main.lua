@@ -41,7 +41,11 @@ propValues["Ark2"] =
 --dofile("QuadFlightControl.V0.07.15.lua")
 --dofile("ScaleController.V2.lua")
 --dofile("QuadFlightControl.V0.09.18.lua")
-dofile("FlightControl/QuadTiltFlightControl.V0.TinySig.lua")
+
+--dofile("FlightControl/QuadTiltFlightControl.V0.TinySig.lua")
+--dofile("Experiments/keyInputAxisInfo.lua")
+--dofile("Experiments/seatSensitivityVisualizer.lua")
+dofile("NavSuite/ArkMapUI.lua")
 --dofile("FlightControl/QuadTiltFlightControl.V0.Dev.lua")
 --dofile("FlightControl/QuadTiltFlightControl.V0.Signals.lua")
 --dofile("FlightControl/QuadTiltFlightControl.V0.Signals.PreMinify.lua")

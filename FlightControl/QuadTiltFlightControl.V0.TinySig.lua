@@ -290,6 +290,7 @@ function processingLogic()
   
   -- processing.run() function:
   this[f_pRun] = function()
+    advanceSignalBuffer()
     --signalLogic[f_sAssignValues](
     setSignalValues(getInputNumbers(compositeInSignalChannels), compositeSignalNames)
 
@@ -425,9 +426,9 @@ function processingLogic()
         = unpack(rotorOutputNames)
 
       graphInfo = graphInfo or {
-        {t_roRotorPitchOut, t_OutValue, {1,0,0}, -1, 2}
-        ,{t_roTargetAcc, t_OutValue, {0,1,0}, -20, 40}
-        ,{t_rAlt, t_Accel, {0,0,1}, -20, 40}
+        {t_roRotorPitchOut, t_OutValue, {255,0,0}, -1, 2}
+        ,{t_roTargetAcc, t_OutValue, {0,255,0}, -20, 40}
+        ,{t_rAlt, t_Accel, {0,0,255}, -20, 40}
       }
 
       setSignalValues(getInputNumbers(rotorInputChannels), rotorSignalNames)
@@ -504,7 +505,6 @@ function processingLogic()
       --tonumber( string.format("%.4f", v) ))
     end
 
-    advanceSignalBuffer()
   end
   -- End of processing.run
 
@@ -824,19 +824,11 @@ end
 
 function onDraw()
 	--if mcTick==nil then return false end -- safety
-	
-	w = s_getWidth()
-	h = s_getHeight()					
-	
-  local tickWidth, 
-    displayX, displayY, xa, ya, xb, yb, d2Offs, head,
-    xVel, yVel, xyVel, velAngle, xyFactor
-    = 5
-
-  xVel = 0--(buffers[bfXPos][bufferHead] - buffers[bfXPos][1]) * bufferDeltaPerSecond
-  yVel = 0--(buffers[bfYPos][bufferHead] - buffers[bfYPos][1]) * bufferDeltaPerSecond
-  velAngle = atan2(yVel, xVel) / pi2
-  head = 0--buffers[bfYaw][1] + 0.25
+		
+  local screenWidth, screenHeight
+	  = s_getWidth()
+    , s_getHeight()					
+  
 
   setColor(0, 0, 255)
 
@@ -848,12 +840,24 @@ function onDraw()
       }
   --]]
   for i,lineDef in ipairz(graphInfo) do
-    lKey, lElement, lColor, lMin, lRange = unpack(lineDef)
-    --lRange = lMax - lMin
-    --getSmoothedValue = function(signalKey, elementKey, smoothTicks, delayTicks)
-    lVal0 = clamp((getSmoothedValue(lKey, lElement, 1, 0) - lMin)/lRange,0,1)
-    lVal1 = clamp((getSmoothedValue(lKey, lElement, 1, 1) - lMin)/lRange,0,1)
+    for xi=1, bufferLength do
+      local tickXStart
+        , tickXEnd
+        , lKey, lElement, lColor, lMin, lRange
+        , lVal0, lVal1 
 
+        = screenWidth * (xi - 1) / bufferLength
+        , screenWidth * xi / bufferLength
+        , unpack(lineDef)
+      --lRange = lMax - lMin
+      --getSmoothedValue = function(signalKey, elementKey, smoothTicks, delayTicks)
+      lVal0 = clamp((getSmoothedValue(lKey, lElement, 1, xi-1) - lMin)/lRange,0,1) 
+        * screenHeight
+      lVal1 = clamp((getSmoothedValue(lKey, lElement, 1, xi) - lMin)/lRange,0,1) 
+        * screenHeight
+      setColor(unpack(lColor))
+      drawLine(tickXStart, lVal0, tickXEnd, lVal1)
+    end
   end
 
 
