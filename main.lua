@@ -37,6 +37,12 @@ propValues["Ark2"] =
 ,math.abs,math.sin,math.cos,math.max,math.min
 ,math.atan,math.sqrt,math.floor,math.pi
 ]] 
+propValues["ArkSF0"] =
+[[
+setColor,drawLine,drawCircle,drawCircleF,drawRectF,drawTriangleF,drawText,drawTextBox,getWidth,getHeight
+]]
+propValues["ArkGF0"] = 
+"map.screenToMap,map.mapToScreen,input.getNumber,input.getBool,output.setNumber,output.setBool,string.format"
 
 --dofile("QuadFlightControl.V0.07.15.lua")
 --dofile("ScaleController.V2.lua")

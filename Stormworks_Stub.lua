@@ -131,6 +131,8 @@ screen = {
   drawClear=f("drawClear"),
   drawTriangleF=f("drawTriangleF"),
   drawTriangle=f("drawTriangle")
+  , drawRectF=f("drawRectF")
+  , drawRect=f("drawRectF")
   , drawCircle=f("drawCircle") --x, y, radius
   , drawCircleF=f("drawCircleF") --x, y, radius
 
