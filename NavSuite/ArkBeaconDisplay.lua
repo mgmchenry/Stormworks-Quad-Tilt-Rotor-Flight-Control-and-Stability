@@ -1,20 +1,39 @@
+--[[
+map.mapToScreen =
+function(mapX, mapY, zoom, screenW, screenH, worldX, worldY)
+  screenW = math.max(screenW, 1)
+  screenH = math.max(screenH, 1)
+  zoom = math.min(math.max(zoom, 0.1), 50) * 1000 / screenH * 2
+  screenX, screenY = (worldX - mapX) / zoom + screenW / 2, screenH / 2 - (worldY - mapY) / zoom
+  return screenX, screenY
+end
+
+map.screenToMap =
+function(mapX, mapY, zoom, screenW, screenH, pixelX, pixelY) 
+
+  screenW = math.max(screenW, 1)
+  screenH = math.max(screenH, 1)
+  zoom = math.min(math.max(zoom, 0.1), 50) * 1000 / screenH * 2
+  worldX, worldY = (pixelX - screenW / 2) * zoom + mapX, (screenH / 2 - pixelY) * zoom + mapY
+  return worldX, worldY
+end
+--]]
 
 -- Stormworks Ark NavSuite Emergency Beacon Dislay
--- V 01.01a Michael McHenry 2020-11-10
-source={"ArkEBD01x01a","repl.it/@mgmchenry"}
+-- V 01.03a Michael McHenry 2020-11-10
+-- Minifies to 2452 ArkNavB01x02a
+source={"ArkNavB01x03a","repl.it/@mgmchenry"}
 
 local G, prop_getText, gmatch, unpack
-  , propPrefix
   , commaDelimited
   , empty, nilzies
   -- nilzies not assigned by design - it's just nil but minimizes to one letter
 
 	= _ENV, property.getText, string.gmatch, table.unpack
-  , "Ark"
   , '([^,\r\n]+)'
   , false
 
-local getTableValues, stringUnpack 
+local getTableValues--, stringUnpack 
 = 
 function(container, iterator, local_returnVals, local_context)
 	local_returnVals = {}
@@ -30,7 +49,7 @@ function(container, iterator, local_returnVals, local_context)
 	end
 	return unpack(local_returnVals)
 end
-, -- stringUnpack
+--[[, -- stringUnpack
 function(text, local_returnVals)
   local_returnVals = {}
   --__debug.AlertIf({"stringUnpack text:", text})
@@ -40,35 +59,67 @@ function(text, local_returnVals)
   end
   return unpack(local_returnVals)
 end
+--]]
 
-local M, S, I, O
+--[[
+local Math, S, I, O
   --= math, screen
-  = getTableValues(G,gmatch("math,screen,input,output", commaDelimited))
+  = getTableValues(G,gmatch(
+    "math,screen,input,output"
+    , commaDelimited))
+--]]
 
 local abs, min, max, sqrt
-  , si, co, pi
-  = getTableValues(M,gmatch("abs,min,max,sqrt,sin,cos,pi", commaDelimited))
+  , ceil, floor
+  , si, co, atan, pi
+  = getTableValues(math,gmatch(
+    "abs,min,max,sqrt,ceil,floor,sin,cos,atan,pi"
+    , commaDelimited))
   
 local C, dL, drawCircle, drawCircleF
   , dRF, dTF, dTx, dTxB
+  , getWidth, getHeight
   
-  = getTableValues(S,gmatch("setColor,drawLine,drawCircle,drawCircleF, drawRectF,drawTriangleF,drawText,drawTextBox", commaDelimited))
+  = getTableValues(screen,gmatch(
+    prop_getText("ArkSF0")
+    --"setColor,drawLine,drawCircle,drawCircleF,drawRectF,drawTriangleF,drawText,drawTextBox,getWidth,getHeight"
+    , commaDelimited))
 
 
 local screenToMap, mapToScreen
-  , getBool
+  , getNumber, getBool
+  , setNumber, setBool
   , format
 
   , clamp, getN, outN
-  = map.screenToMap, map.mapToScreen
-  , I.getBool
-  , string.format
+  , dPoi
+
+  = getTableValues(G,gmatch(
+    prop_getText("ArkGF0")
+    --"map.screenToMap,map.mapToScreen,input.getNumber,input.getBool,output.setNumber,output.setBool,string.format"
+    , commaDelimited))
+   
 
 
-function clamp(a,b,c) return M.min(M.max(a,b),c) end
-function getN(...)local a={}for b,c in ipairs({...})do a[b]=I.getNumber(c)end;return unpack(a)end
-function outN(o, ...) for i,v in ipairs({...}) do O.setNumber(o+i-1,v) end end
+function clamp(a,b,c) return min(max(a,b),c) end
+--function getN(...)local a={}for b,c in ipairs({...})do a[b]=getNumber(c)end;return unpack(a)end
+--function outN(o, ...) for i,v in ipairs({...}) do setNumber(o+i-1,v) end end
 
+local I, O, Ib, Ob -- input/output tables
+  , zoom, tz, zooms
+  , grids, grid
+  , sis, SZ, wp, sel
+  , wayInfo, selX, selY
+  , triMarkerSize
+  , mapX, mapY, mapZoom
+
+  = {},{},{},{}
+  , 1, 5*32*0.11, {0.3,2,5,10,30,50}
+  , {10,100,500,1000,2500,5000}, 100
+  , {5,4,3,2,1,1}, 4, {}, 0
+  , {}, 0, 0
+  , 15
+  , 0, 0, 1
 
 
 local beaconPings, lastPingIndex, maxPings, hotSpots
@@ -108,12 +159,20 @@ getCircleIntersections = function (x1,y1,r1,x2,y2,r2)
 end
 
 addBeaconPing = function(gpsX,gpsY,distance)
-  lastPingIndex = (lastPingIndex % maxPings) + 1
 
-  local newPing 
+  local newPing, oldPing
+    , pingDistance
     , x1, y1, r1, h1, h2
     , score, hsDistance
     = {gpsX, gpsY, distance}
+    , beaconPings[lastPingIndex]
+
+  if oldPing then
+    pingDistance = sqrt((newPing[1]-oldPing[1])^2 + (newPing[2]-oldPing[2])^2)
+    if pingDistance<400 then return end
+  end
+
+  lastPingIndex = (lastPingIndex % maxPings) + 1
   beaconPings[lastPingIndex] = newPing
 
   hotSpots, hotSpotMaxScore = {}, 1
@@ -130,79 +189,103 @@ addBeaconPing = function(gpsX,gpsY,distance)
     end
   end
   for i, hotSpot in ipairs(hotSpots) do
-    score = 0
+    score = -2 -- Every hotspot should have 2 pings it matches perfectly
     for i2, ping in ipairs(beaconPings) do
       hsDistance = ping[3] - sqrt(
         (ping[1]-hotSpot[1])^2 
         + (ping[2]-hotSpot[2])^2)
-      score = score + max(0, 1 - abs(hsDistance/200))^3
+      --score = score + max(0, 1 - abs(hsDistance/200))^3
+      hsDistance = max(200, abs(hsDistance))
+      score = score + 200/hsDistance
     end
     hotSpot[3] = score^2
     hotSpotMaxScore = max(score^2, hotSpotMaxScore)
   end
 end
 
+--[[
 addBeaconPing(100,100,3000)
 addBeaconPing(0,3000,2300)
 addBeaconPing(3000,0,2300)
+--]]
+
+
+function dPoi(xx,yy,s,r,...) 
+  local a,x,y=...,0,0 a=(a or 30)*pi/360;
+  x=xx+s/2*si(r);
+  y=yy-s/2*co(r);
+  xx=xx-s/4*si(r);
+  yy=yy+s/4*co(r);
+  dTF(xx,yy,x,y,x-s*si(r+a),y+s*co(r+a))
+  dTF(xx,yy,x,y,x-s*si(r-a),y+s*co(r-a)) 
+end
 
 function onTick()  
+  for i=1,32 do
+    I[i]=getNumber(i)
+    O[i]=I[i]
+    Ib[i]=getBool(i)
+    Ob[i]=Ib[i]
+  end
 
-	t2 = getBool(1) -- also getBool(2) for touch 2
-	W,H,tx,ty,tx2,ty2
-    , gx,gy,gz,dir,swp -- 11-15
-    , inputX, inputY
-    , debug_beaconRadius
-     = getN(1,2,3,4,5,6,11,12,13,14,15,16,17,18)
+
+	W,H,tx,ty,tx2,ty2 -- 1-6
+    , _, _, _, _ -- 7-10 pilot input axes
+    , gx,gy,gz,dir,_ -- 11-14, 15=forwardSpeed
+    , inputX, inputY -- 16,17
+    , mapX, mapY, mapZoom -- 18-20
+    , _, _, _, _, _ -- 21-25
+    , debug_beaconRadius -- 26
+    = unpack(I)
+
 	if gx == nil then return true end
 	if wx == nil then 
     if gx==0 then return true end 
     wx,wy,Fx,Fy,Fz = gx,gy,gx,gy,zoom 
   end
-  
-	beaconPulse = getBool(10)
+    
+	beaconPulse = Ib[26]
 	beaconQuietCounter = beaconQuietCounter + 1
   if beaconPulse and beaconPulse~=lastBeaconPulse then
 		lastBeaconDistance = beaconQuietCounter * 45
 		beaconQuietCounter = 0   
 
-    lastBeaconDistance = debug_beaconRadius
-    addBeaconPing(inputX, inputY, lastBeaconDistance)
+    --lastBeaconDistance = debug_beaconRadius
+    if lastBeaconDistance > 460 then
+      addBeaconPing(gx, gy, lastBeaconDistance)
+    end
   end
   lastBeaconPulse = beaconPulse
-	O.setBool(20,beaconPulse)
-	O.setNumber(20,lastBeaconDistance)
+
+  -- already done:
+  --Ob[26] = beaconPulse
+  O[26] = lastBeaconDistance
+  
+  for i=1,32 do
+    setNumber(i, O[i])
+    setBool(i, Ob[i])
+  end
 end
 
 
 function onDraw()
 	if wx==nil then return true end
-	w=S.getWidth()
-	h=S.getHeight()
+	w=getWidth()
+	h=getHeight()
 	cx=w/2
 	cy=h/2
 	sz=SZ/H*h
-	if w==W then
-    mx,my,zo=wx,wy,zoom 
-  else 
-    -- current location
-    mx,my,zo=gx,gy,zoom 
-  end
-	
-	S.setMapColorOcean(10,10,15)
-	S.setMapColorShallows(15,15,20)
-	S.setMapColorLand(60,60,60)
-	S.setMapColorGrass(40,60,40)
-	S.setMapColorSand(55,55,50)
-	S.setMapColorSnow(80,80,80)
-    S.drawMap(mx,my,zo)
-	x1,y1 = screenToMap(mx,my, zo, w,h, 0,h)
-	x2,y2 = screenToMap(mx,my, zo, w,h, w,0)
-	x1 = M.floor(x1/grid)*grid
-	y1 = M.floor(y1/grid)*grid
+
+  mx,my,zo=mapX,mapY,mapZoom
   
   meterPixels = (mapToScreen(0, 0, zo, w, h, 1000, 0) - w/2) / 1000
 
+  --[[
+  C(200,200,0,200)
+    dRF(15,h-15,w-15,16)
+    dTxB(20,h-19,w-20,20,format("wtf %.2f scale:%.1f",meterPixels,zo),-1,1)
+  --]]
+  --[[
   if inputX and inputY then
     C(200,0,0)
     bx,by = mapToScreen(mx,my,zo,w,h,inputX,inputY)
@@ -210,6 +293,7 @@ function onDraw()
     drawCircle(bx,by,br)
     drawCircle(bx,by,beaconRadius*meterPixels)
   end
+  --]]
 
   for bi = 1, #beaconPings do
 
@@ -218,7 +302,7 @@ function onDraw()
       = (5 - (lastPingIndex - bi) % maxPings) / 6
       , unpack(beaconPings[bi])
 
-    C(200,0,0,max(freshness,0)^2 * 200)
+    C(200,0,0,max(freshness,0)^2 * 150)
     pingX, pingY = mapToScreen(mx,my,zo,w,h,pingX,pingY)
     drawCircle(pingX,pingY,3)
     drawCircle(pingX,pingY,pingR*meterPixels)
@@ -227,7 +311,11 @@ function onDraw()
   for bi = 1, #hotSpots do
     local pingX, pingY, score = unpack(hotSpots[bi])
     score = (score/hotSpotMaxScore)^2
-    C(200,200,0,100 * score)
+    C(200,200,0,50 * score)
     pingX, pingY = mapToScreen(mx,my,zo,w,h,pingX,pingY)
     drawCircleF(pingX,pingY, 8 * score - 2)
   end
+
+end
+
+

@@ -20,9 +20,12 @@ end
 --]]
 
 -- Stormworks Ark NavSuite MapUI Controller
--- V 01.01a Michael McHenry 2020-11-10
+-- V 01.03a Michael McHenry 2020-11-10
+-- Minifies to 3,793 ArkNav01x02a
 -- Pony IDE testSim https://lua.flaffipony.rocks/?id=_uM_iSyvu
-source={"ArkNav01x02a","repl.it/@mgmchenry"}
+-- Adapted from Tajin's excellent navigation map to allow additional overlays
+-- and to be usable on 2x2 monitors
+source={"ArkNav01x03a","repl.it/@mgmchenry"}
 
 local G, prop_getText, gmatch, unpack
   , commaDelimited
@@ -71,7 +74,7 @@ local Math, S, I, O
 
 local abs, min, max, sqrt
   , ceil, floor
-  , si, co, atan, pi
+  , sin, co, atan, pi
   = getTableValues(math,gmatch(
     "abs,min,max,sqrt,ceil,floor,sin,cos,atan,pi"
     , commaDelimited))
@@ -143,12 +146,12 @@ sel = 0
 
 function dPoi(xx,yy,s,r,...) 
   local a,x,y=...,0,0 a=(a or 30)*pi/360;
-  x=xx+s/2*si(r);
+  x=xx+s/2*sin(r);
   y=yy-s/2*co(r);
-  xx=xx-s/4*si(r);
+  xx=xx-s/4*sin(r);
   yy=yy+s/4*co(r);
-  dTF(xx,yy,x,y,x-s*si(r+a),y+s*co(r+a))
-  dTF(xx,yy,x,y,x-s*si(r-a),y+s*co(r-a)) 
+  dTF(xx,yy,x,y,x-s*sin(r+a),y+s*co(r+a))
+  dTF(xx,yy,x,y,x-s*sin(r-a),y+s*co(r-a)) 
 end
 
 function onTick()  
@@ -200,7 +203,7 @@ function onTick()
       centerOnGPS = true
     elseif tx < 10 then
 			tz = ty - homeButtonHeight
-			Fz = tz/(h-homeButtonHeight)*5
+			Fz = sin((tz/(h-homeButtonHeight))^2*pi/2)*50
       --sin((tz/H-homeButtonHeight)^2*pi/2)*50
 			i = 1
 			while Fz>zooms[i] do i=i+1 end
