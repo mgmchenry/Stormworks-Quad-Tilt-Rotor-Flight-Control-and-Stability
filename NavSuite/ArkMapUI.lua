@@ -473,7 +473,18 @@ io 18 map X
 io 19 map Y
 io 20 map zoom
 io 21 selected waypoin6
-io 22 waypoint distance
-io 23 angle to waypoint
+io 22 waypoint X
+io 23 waypoint Y
+io 24 waypoint distance
+io 25 angle to waypoint
+ o 26 beacon Distance
+i  27 buoy X
+i  28 buoy Y
+i  29 buoy Alt 
+ 
+Bools
+01 touch1
+02 touch3
+26 beacon pulse
 
 --]]

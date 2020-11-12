@@ -22,7 +22,8 @@ end
 -- Stormworks Ark NavSuite Emergency Beacon Dislay
 -- V 01.03a Michael McHenry 2020-11-10
 -- Minifies to 2452 ArkNavB01x02a
-source={"ArkNavB01x03a","repl.it/@mgmchenry"}
+--             2912 ArkNavB01x04d
+source={"ArkNavB01x04d","repl.it/@mgmchenry"}
 
 local G, prop_getText, gmatch, unpack
   , commaDelimited
@@ -123,23 +124,36 @@ local I, O, Ib, Ob -- input/output tables
 
 
 local beaconPings, lastPingIndex, maxPings, hotSpots
+  , strongBois, buoyData
+  , extraPingIndex, extraPingMax
   , hotSpotMaxScore
-  , beaconPulse, lastBeaconPulse, lastBeaconDistance, beaconQuietCounter
+  , beaconPulse, lastBeaconDistance, beaconQuietCounter, lastBeaconTicks
 
+  , getDistance2d, getDistance3d
   , getCircleIntersections, addBeaconPing
-  , debug_beaconRadius -- beaconRadius is just for debug purposes
 
   = {}, 0, 10, {}
+  , {}, {}
+  , 0, 5
   , 1
-  , false, false, 0, 0
+  , false, 0, 0, 0
 
+getDistance2d = function(p1, p2)
+  return sqrt((p1[1]-p2[1])^2 + (p1[2]-p2[2])^2)
+end
+getDistance3d = function(p1, p2)
+  return sqrt((p1[1]-p2[1])^2 + (p1[2]-p2[2])^2 + (p1[3]-p2[3])^2)
+end
 
 getCircleIntersections = function (x1,y1,r1,x2,y2,r2)
   local distance
     , aSide, oSide, aX, aY, oX, oY
-    = sqrt((x1-x2)^2 + (y1-y2)^2)
+    --= sqrt((x1-x2)^2 + (y1-y2)^2)
+    = getDistance2d({x1,y1},{x2,y2})
 
-  if distance>r1+r2 then return end
+  if distance>r1+r2 -- they are too far apart
+    or distance<abs(r1-r2) -- one is inside the other
+    then return end -- no intersections for you
 
   -- distance from xy1 to xy2 = aSide+bSide. 
   -- aSide is distance from xy1 to intersection line. 
@@ -168,8 +182,16 @@ addBeaconPing = function(gpsX,gpsY,distance)
     , beaconPings[lastPingIndex]
 
   if oldPing then
-    pingDistance = sqrt((newPing[1]-oldPing[1])^2 + (newPing[2]-oldPing[2])^2)
-    if pingDistance<400 then return end
+    pingDistance 
+      = getDistance2d(newPing,oldPing)
+      -- = sqrt((newPing[1]-oldPing[1])^2 + (newPing[2]-oldPing[2])^2)
+    if pingDistance<200 then return end
+  end
+
+  -- let's keep some older pings around as "extra pings"
+  if lastPingIndex==maxPings then
+    extraPingIndex = (extraPingIndex % extraPingMax) + 1
+    beaconPings[maxPings+extraPingIndex] = beaconPings[lastPingIndex]
   end
 
   lastPingIndex = (lastPingIndex % maxPings) + 1
@@ -189,19 +211,48 @@ addBeaconPing = function(gpsX,gpsY,distance)
     end
   end
   for i, hotSpot in ipairs(hotSpots) do
-    score = -2 -- Every hotspot should have 2 pings it matches perfectly
+    score = -2 
+    -- Every hotspot should have 2 pings it matches perfectly
+    -- which will raise the score to 0
     for i2, ping in ipairs(beaconPings) do
-      hsDistance = ping[3] - sqrt(
-        (ping[1]-hotSpot[1])^2 
-        + (ping[2]-hotSpot[2])^2)
+      hsDistance = ping[3] - getDistance2d(ping,hotSpot)
+      --sqrt(
+      --  (ping[1]-hotSpot[1])^2 
+      --  + (ping[2]-hotSpot[2])^2)
       --score = score + max(0, 1 - abs(hsDistance/200))^3
-      hsDistance = max(200, abs(hsDistance))
-      score = score + 200/hsDistance
+      hsDistance = max(100, abs(hsDistance))
+      score = score + 100/hsDistance
     end
     hotSpot[3] = score^2
     hotSpotMaxScore = max(score^2, hotSpotMaxScore)
   end
 end
+
+--[[
+function beaconDistance(ticksElapsed)
+  return ticksElapsed * 50 - 200
+end
+--]]
+
+--[[
+based function by illy:
+  meters = ticks * 50 - 200
+confirmed by adata from woeken_up:
+
+minTicks	maxTicks	Meters	min*50-200	max*50-200	avg illy method
+9	9	100	250	250	250
+9	9	200	250	250	250
+9	10	250	250	300	275
+9	11	300	250	350	300
+11	14	400	350	500	425
+13	16	500	450	600	525
+22	26	1000	900	1100	1000
+42	46	2000	1900	2100	2000
+60	68	3000	2800	3200	3000
+79	90	4000	3750	4300	4025
+100	108	5000	4800	5200	5000
+200	209	10000	9800	10250	10025
+--]]
 
 --[[
 addBeaconPing(100,100,3000)
@@ -235,7 +286,8 @@ function onTick()
     , inputX, inputY -- 16,17
     , mapX, mapY, mapZoom -- 18-20
     , _, _, _, _, _ -- 21-25
-    , debug_beaconRadius -- 26
+    , _ -- 26
+    , buoyData[1], buoyData[2], buoyData[3] -- 27 - 29
     = unpack(I)
 
 	if gx == nil then return true end
@@ -243,19 +295,24 @@ function onTick()
     if gx==0 then return true end 
     wx,wy,Fx,Fy,Fz = gx,gy,gx,gy,zoom 
   end
-    
+  
+  buoyData[4] = getDistance2d(buoyData, {gx, gy})
+  buoyData[5] = getDistance3d(buoyData, {gx, gy, gz})
 	beaconPulse = Ib[26]
-	beaconQuietCounter = beaconQuietCounter + 1
-  if beaconPulse and beaconPulse~=lastBeaconPulse then
-		lastBeaconDistance = beaconQuietCounter * 45
-		beaconQuietCounter = 0   
+	
+  if beaconPulse then
+    if beaconQuietCounter>0 then
+      lastBeaconDistance = beaconQuietCounter * 50 - 200
+      lastBeaconTicks = beaconQuietCounter
 
-    --lastBeaconDistance = debug_beaconRadius
-    if lastBeaconDistance > 460 then
-      addBeaconPing(gx, gy, lastBeaconDistance)
-    end
+      if lastBeaconDistance > 300 then
+        addBeaconPing(gx, gy, lastBeaconDistance)
+      end
+    end  
+		beaconQuietCounter = 0     
+  else
+    beaconQuietCounter = beaconQuietCounter + 1
   end
-  lastBeaconPulse = beaconPulse
 
   -- already done:
   --Ob[26] = beaconPulse
@@ -316,6 +373,11 @@ function onDraw()
     drawCircleF(pingX,pingY, 8 * score - 2)
   end
 
+  C(200,200,200,200)
+  dTx(96,20,format("beacon range: %.0f ticks: %i\nbuoy dist2d: %.0f\nbuoy dist3d: %.0f\nbuoy x/y/z: %.0f %.0f %.0f"
+    , lastBeaconDistance, lastBeaconTicks 
+    , buoyData[4], buoyData[5]
+    , buoyData[1], buoyData[2], buoyData[3] ))
 end
 
 
