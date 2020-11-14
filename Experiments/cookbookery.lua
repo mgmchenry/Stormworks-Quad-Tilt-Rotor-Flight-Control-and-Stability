@@ -237,3 +237,16 @@ function getIntersections(x1,y1,r1,x2,y2,r2)
 
   return {aX+oX,aY+oY}, {aX-oX,aY-oY}
 end
+
+-- goofy boolean truth table for n columns I did one day
+columnCount = 5 or whatever
+gears = {}
+
+for i = 1, 2^columnCount do
+  gears[i] = {i}
+  for i2 = columnCount-1, 0, -1 do
+    oneMeansTrue = ((i-1)/2^(i2) % 2) >= 1 
+    gears[i][columnCount-i2+1] = oneMeansTrue
+  end
+  print(unpack(gears[i]))
+end

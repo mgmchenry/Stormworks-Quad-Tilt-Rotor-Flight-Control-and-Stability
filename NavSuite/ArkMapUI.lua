@@ -101,8 +101,25 @@ local screenToMap, mapToScreen
     prop_getText("ArkGF0")
     --"map.screenToMap,map.mapToScreen,input.getNumber,input.getBool,output.setNumber,output.setBool,string.format"
     , commaDelimited))
-   
 
+-- test custom implementation   
+screenToMap =
+function(mapX, mapY, zoom, screenW, screenH, pixelX, pixelY) 
+  screenW = max(screenW, 1)
+  screenH = max(screenH, 1)
+  zoom = min(max(zoom, 0.1), 50) * 1000 / screenW -- screenH * 2
+  worldX, worldY = (pixelX - screenW / 2) * zoom + mapX, (screenH / 2 - pixelY) * zoom + mapY
+  return worldX, worldY
+end
+
+mapToScreen =
+function(mapX, mapY, zoom, screenW, screenH, worldX, worldY)
+  screenW = max(screenW, 1)
+  screenH = max(screenH, 1)
+  zoom = min(max(zoom, 0.1), 50) * 1000 / screenW -- screenH * 2
+  screenX, screenY = (worldX - mapX) / zoom + screenW / 2, screenH / 2 - (worldY - mapY) / zoom
+  return screenX, screenY
+end
 
 function clamp(a,b,c) return min(max(a,b),c) end
 --function getN(...)local a={}for b,c in ipairs({...})do a[b]=getNumber(c)end;return unpack(a)end

@@ -3,8 +3,6 @@
 inValues, outValues, inBools, outBools = {}, {}, {}, {}
 table.unpack = table.unpack or unpack
 
---stopThere()
-
 -- Set up SW environment
 dofile("Stormworks_Stub.lua")
 
@@ -51,7 +49,7 @@ propValues["ArkGF0"] =
 --dofile("FlightControl/QuadTiltFlightControl.V0.TinySig.lua")
 --dofile("Experiments/keyInputAxisInfo.lua")
 --dofile("Experiments/seatSensitivityVisualizer.lua")
-dofile("NavSuite/ArkBeaconDisplay.lua")
+dofile("NavSuite/ArkTouchMux.lua")
 --dofile("FlightControl/QuadTiltFlightControl.V0.Dev.lua")
 --dofile("FlightControl/QuadTiltFlightControl.V0.Signals.lua")
 --dofile("FlightControl/QuadTiltFlightControl.V0.Signals.PreMinify.lua")

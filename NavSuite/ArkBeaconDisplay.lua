@@ -23,7 +23,7 @@ end
 -- V 01.03a Michael McHenry 2020-11-10
 -- Minifies to 2452 ArkNavB01x02a
 --             2912 ArkNavB01x04d
-source={"ArkNavB01x04d","repl.it/@mgmchenry"}
+source={"ArkNavB01x04e","repl.it/@mgmchenry"}
 
 local G, prop_getText, gmatch, unpack
   , commaDelimited
@@ -62,14 +62,6 @@ function(text, local_returnVals)
 end
 --]]
 
---[[
-local Math, S, I, O
-  --= math, screen
-  = getTableValues(G,gmatch(
-    "math,screen,input,output"
-    , commaDelimited))
---]]
-
 local abs, min, max, sqrt
   , ceil, floor
   , si, co, atan, pi
@@ -103,8 +95,6 @@ local screenToMap, mapToScreen
 
 
 function clamp(a,b,c) return min(max(a,b),c) end
---function getN(...)local a={}for b,c in ipairs({...})do a[b]=getNumber(c)end;return unpack(a)end
---function outN(o, ...) for i,v in ipairs({...}) do setNumber(o+i-1,v) end end
 
 local I, O, Ib, Ob -- input/output tables
   , zoom, tz, zooms
@@ -130,6 +120,7 @@ local beaconPings, lastPingIndex, maxPings, hotSpots
   , beaconPulse, lastBeaconDistance, beaconQuietCounter, lastBeaconTicks
 
   , getDistance2d, getDistance3d
+  , reverseSortTableOnElement
   , getCircleIntersections, addBeaconPing
 
   = {}, 0, 10, {}
@@ -138,14 +129,22 @@ local beaconPings, lastPingIndex, maxPings, hotSpots
   , 1
   , false, 0, 0, 0
 
-getDistance2d = function(p1, p2)
+function getDistance2d(p1, p2)
   return sqrt((p1[1]-p2[1])^2 + (p1[2]-p2[2])^2)
 end
-getDistance3d = function(p1, p2)
+function getDistance3d(p1, p2)
   return sqrt((p1[1]-p2[1])^2 + (p1[2]-p2[2])^2 + (p1[3]-p2[3])^2)
 end
+function reverseSortTableOnElement(someTable, elementIndex)
+  --print("sorting some table", someTable, elementIndex)
+  --print(unpack(someTable))
+  table.sort(someTable, function (s1, s2) 
+    --print("s1", unpack(s1))
+    --print("s2", unpack(s2))
+    return s1[elementIndex] > s2[elementIndex] end) -- > reverse sort, largest first
+end
 
-getCircleIntersections = function (x1,y1,r1,x2,y2,r2)
+function getCircleIntersections(x1,y1,r1,x2,y2,r2)
   local distance
     , aSide, oSide, aX, aY, oX, oY
     --= sqrt((x1-x2)^2 + (y1-y2)^2)
@@ -174,12 +173,13 @@ end
 
 addBeaconPing = function(gpsX,gpsY,distance)
 
-  local newPing, oldPing
+  local newPing, oldPing, blobs, nearBlob
     , pingDistance
     , x1, y1, r1, h1, h2
     , score, hsDistance
     = {gpsX, gpsY, distance}
     , beaconPings[lastPingIndex]
+    , {}
 
   if oldPing then
     pingDistance 
@@ -223,8 +223,38 @@ addBeaconPing = function(gpsX,gpsY,distance)
       hsDistance = max(100, abs(hsDistance))
       score = score + 100/hsDistance
     end
-    hotSpot[3] = score^2
-    hotSpotMaxScore = max(score^2, hotSpotMaxScore)
+    hotSpot[3] = score --^2
+    hotSpotMaxScore = max(score, hotSpotMaxScore)
+  end
+  reverseSortTableOnElement(hotSpots,3) -- > reverse sort, largest first on score
+  for i, hotSpot in ipairs(hotSpots) do
+    if hotSpot[3]*2>hotSpotMaxScore then
+      nearBlob={100000,0,0,0,0,200}
+      for i, blob in ipairs(blobs)  do
+        -- find the blob closest to this hotspot
+        blob[6] = getDistance2d(hotSpot,blob)
+        if blob[6]<nearBlob[6] then
+          nearBlob=blob
+        end
+      end
+      if nearBlob[3]==0 then 
+        blobs[#blobs+1] = nearBlob
+      end
+      -- add weighted score and location to blob
+      nearBlob[3]=nearBlob[3]+hotSpot[3]
+      nearBlob[4]=nearBlob[4]+hotSpot[1]*hotSpot[3]
+      nearBlob[5]=nearBlob[5]+hotSpot[2]*hotSpot[3]
+      -- find new blob center
+      nearBlob[1]=nearBlob[4]/nearBlob[3]
+      nearBlob[2]=nearBlob[5]/nearBlob[3]
+    end
+  end
+  
+  reverseSortTableOnElement(blobs,3)
+  reverseSortTableOnElement(strongBois,3)
+  while #strongBois > 8 do strongBois[#strongBois]=nil end
+  for i=1,3 do
+    strongBois[#strongBois+1]=blobs[i]
   end
 end
 
@@ -254,11 +284,12 @@ minTicks	maxTicks	Meters	min*50-200	max*50-200	avg illy method
 200	209	10000	9800	10250	10025
 --]]
 
---[[
+--[ [
 addBeaconPing(100,100,3000)
 addBeaconPing(0,3000,2300)
 addBeaconPing(3000,0,2300)
---]]
+addBeaconPing(200,200,2900)
+--] ]
 
 
 function dPoi(xx,yy,s,r,...) 
@@ -372,6 +403,17 @@ function onDraw()
     pingX, pingY = mapToScreen(mx,my,zo,w,h,pingX,pingY)
     drawCircleF(pingX,pingY, 8 * score - 2)
   end
+
+  for bi = 1, #strongBois do
+    local pingX, pingY, score = unpack(strongBois[bi])
+    C(0,255,0,255)
+    pingX, pingY = mapToScreen(mx,my,zo,w,h,pingX,pingY)
+    drawCircleF(pingX,pingY, 3)
+		dL(pingX-2,pingY,pingX+2,pingY)
+    dL(pingX,pingY-2,pingX,pingY+2)
+    dTx(pingX, pingY, format("%.0f", score))
+  end
+  
 
   C(200,200,200,200)
   dTx(96,20,format("beacon range: %.0f ticks: %i\nbuoy dist2d: %.0f\nbuoy dist3d: %.0f\nbuoy x/y/z: %.0f %.0f %.0f"
