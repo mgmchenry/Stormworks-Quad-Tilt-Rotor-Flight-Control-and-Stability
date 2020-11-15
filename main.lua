@@ -1,5 +1,7 @@
 -- Stormworks Lua module Test Helper Example Thing
 -- V 0.4 Michael McHenry 2019-06-07
+os.execute("clear")
+
 inValues, outValues, inBools, outBools = {}, {}, {}, {}
 table.unpack = table.unpack or unpack
 
@@ -49,7 +51,7 @@ propValues["ArkGF0"] =
 --dofile("FlightControl/QuadTiltFlightControl.V0.TinySig.lua")
 --dofile("Experiments/keyInputAxisInfo.lua")
 --dofile("Experiments/seatSensitivityVisualizer.lua")
-dofile("NavSuite/ArkTouchMux.lua")
+dofile("NavSuite/ArkBeaconDisplay.lua")
 --dofile("FlightControl/QuadTiltFlightControl.V0.Dev.lua")
 --dofile("FlightControl/QuadTiltFlightControl.V0.Signals.lua")
 --dofile("FlightControl/QuadTiltFlightControl.V0.Signals.PreMinify.lua")
