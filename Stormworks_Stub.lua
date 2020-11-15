@@ -74,7 +74,12 @@ local function f(name, func, isQuiet)
       
     --print("func, count", name, funcInfo.name, funcInfo.count)
 
-    if name~=funcInfo.name then
+    if isQuiet then
+      funcInfo.quietTexts = {"quiet function: "..name}
+      maybePrint = function(m, ...)
+        funcInfo.quietTexts[#funcInfo.quietTexts+1] = m
+      end
+    elseif name~=funcInfo.name then
       
       if #funcInfo.messageTexts>0 then
         for i, message in ipairs(funcInfo.messageTexts) do
@@ -90,13 +95,6 @@ local function f(name, func, isQuiet)
         funcInfo.messageTexts={}
         maybePrint = funcInfo.print
         maybePrint("    ... " .. (funcInfo.count-3) .. " additional calls to " .. name .. " ...")
-      end
-    end
-
-    if isQuiet then
-      funcInfo.quietTexts = {}
-      maybePrint = function(m, ...)
-        funcInfo.quietTexts[#funcInfo.quietTexts+1] = m
       end
     end
 
@@ -170,7 +168,7 @@ screen = {
   getWidth=f("getWidth", function() return 98 end),
   getHeight=f("getHeight", function() return 98 end),
   drawLine=f("drawLine"),
-  setColor=f("setColor"),
+  setColor=f("setColor", nil, true),
   drawClear=f("drawClear"),
   drawTriangleF=f("drawTriangleF"),
   drawTriangle=f("drawTriangle")

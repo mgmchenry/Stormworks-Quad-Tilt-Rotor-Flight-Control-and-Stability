@@ -5,7 +5,7 @@
 --             3310 ArkNavB01x05a
 --             3646 ArkNavB01x06a
 --             3703 ArkNavB01x06d
-source={"ArkNavB01x06d","repl.it/@mgmchenry"}
+source={"ArkNavB01x06e","repl.it/@mgmchenry"}
 
 local G, prop_getText, gmatch, unpack
   , commaDelimited
@@ -354,9 +354,9 @@ function onDraw()
 
   --[ [
   local betterCircle = function(x,y,r,steps)
-    drawCircle(x,y,r)
-    r = min(r,200)
-    steps = floor(steps or (r*2))
+    drawCircle(x,y+5,r)
+    --r = min(r,200)
+    steps = min(2000, floor(steps or (r*2)))
     --print(" ** Circle steps: ", steps)
     if x+r<0 or x-r>w
       or y+r<0 or y-r>h then 
@@ -372,6 +372,9 @@ function onDraw()
       x2, y2 = x + sin(aRadians) * r
         , y - cos(aRadians) * r
 
+      --No visual improvement from aligning the circle points to 
+      --drawLine(floor(x1)-5,floor(y1),floor(x2)-5,floor(y2))
+      --drawLine(floor(x1)+0.5,floor(y1)-4.5,floor(x2)+0.5,floor(y2)-4.5)
       drawLine(x1,y1,x2,y2)
       x1, y1 = x2, y2 -- because I'm not *stupid*
     end
