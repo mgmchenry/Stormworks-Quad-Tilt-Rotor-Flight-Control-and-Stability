@@ -5,14 +5,17 @@
 --             3310 ArkNavB01x05a
 --             3646 ArkNavB01x06a
 --             3703 ArkNavB01x06d
+--             4139 ArkNavB01x06e (4094 without source id)
 source={"ArkNavB01x06e","repl.it/@mgmchenry"}
 
 local G, prop_getText, gmatch, unpack
+  , ipairz
   , commaDelimited
   , empty, nilzies
   -- nilzies not assigned by design - it's just nil but minimizes to one letter
 
 	= _ENV, property.getText, string.gmatch, table.unpack
+  , ipairs
   , '([^,\r\n]+)'
   , false
 
@@ -48,7 +51,8 @@ local abs, min, max, sqrt
   , ceil, floor
   , sin, cos, atan, pi
   = getTableValues(math,gmatch(
-    "abs,min,max,sqrt,ceil,floor,sin,cos,atan,pi"
+    prop_getText("ArkMF0")
+    --"abs,min,max,sqrt,ceil,floor,sin,cos,atan,pi"
     , commaDelimited))
   
 local C, drawLine, drawCircle, drawCircleF
@@ -92,7 +96,7 @@ local beaconPings, lastPingIndex, maxPings, hotSpots
 
   , getDistance2d, getDistance3d
   , reverseSortTableOnElement
-  , getCircleIntersections, addBeaconPing
+  , getCircleIntersections, addBeaconPing, adjustHotspots
 
   = {}, 0, 10, {}
   , {}, {}
@@ -116,6 +120,12 @@ function reverseSortTableOnElement(someTable, elementIndex)
 end
 
 function getCircleIntersections(x1,y1,r1,x2,y2,r2)
+  -- or ({x1,y1,r1},{x2,y2,r2})
+  if type(x1)=="table" then
+    x2, y2, r2 = unpack(y1)
+    x1, y1, r1 = unpack(x1)
+  end
+
   local distance
     , aSide, bSide, oSide, aX, aY, oX, oY, p1, p2
     --= sqrt((x1-x2)^2 + (y1-y2)^2)
@@ -151,21 +161,93 @@ function getCircleIntersections(x1,y1,r1,x2,y2,r2)
   return p1, p2
 end
 
-addBeaconPing = function(gpsX,gpsY,distance)
+adjustHotspots = function(gpsX, gpsY, beaconRange, specificSpots, ageRate)
+  hotSpotMaxScore = 1
 
-  local newPing, oldPing, blobs, nearBlob
-    , pingDistance
+  if specificSpots then
+    -- adjusting a subset of spots
+    ageRate = ageRate or 0
+  else    
+    specificSpots = hotSpots
+    ageRate = ageRate or 1
+  end
+
+  for i, hotSpot in ipairz(specificSpots) do
+    local x1, y1, score, age, valueWeight, x2, y2
+      , newScore, errorRange, hsDistance
+      = unpack(hotSpot)
+
+    score, age, valueWeight
+      = score or 2 -- default score
+      , (age or 0) + ageRate -- increase age
+      , valueWeight or 2
+
+    errorRange = 200
+    hsDistance = getDistance2d({gpsX, gpsY},hotSpot)
+    newScore = -- maxes if beacon range is within 200m, falls off from there
+      errorRange /
+      (max(errorRange, abs(beaconRange - hsDistance)))
+
+    if newScore > 0.5 then
+      valueWeight = valueWeight + newScore
+      x2 = gpsX + (hotSpot[1] - gpsX) / hsDistance * beaconRange
+      y2 = gpsY + (hotSpot[2] - gpsY) / hsDistance * beaconRange
+
+      x1, y1
+        = x1 + (x2-x1) * newScore / valueWeight
+        , y1 + (y2-y1) * newScore / valueWeight
+
+      hotSpot[1], hotSpot[2], hotSpot[5]
+        = x1, y1, valueWeight
+    end
+      
+    score = score + newScore - 0.5
+    hotSpot[3], hotSpot[4] 
+      = score
+      , age
+
+    hotSpotMaxScore = max(score, hotSpotMaxScore)
+  end
+
+  if hotSpots~=specificSpots then return end
+
+  for i, hotSpot, otherSpot, valueWeight in ipairz(specificSpots) do
+    for i2=i+1, #specificSpots do
+      otherSpot = specificSpots[i2]
+      if getDistance2d(hotSpot, otherSpot) < 100 then
+        -- x1, y1, score, age, weight = unpack(hotSpot)
+        valueWeight = hotSpot[5] + otherSpot[5]
+        hotSpot[1] = (hotSpot[1] + (otherSpot[1] - hotSpot[1]) * otherSpot[5]) / valueWeight
+        hotSpot[2] = (hotSpot[2] + (otherSpot[2] - hotSpot[2]) * otherSpot[5]) / valueWeight
+        hotSpot[5] = valueWeight
+        hotSpot[3] = hotSpot[3] + otherSpot[3]
+        hotSpot[4] = 0 -- reset age so it sticks around
+      end
+    end
+  end
+end
+
+addBeaconPing = function(gpsX,gpsY,beaconRange)
+
+  local newPing
+    , oldPing
+    , blobs, newSpots
+    , oldHotSpotCount
+
+    , nearBlob
     , x1, y1, r1, h1, h2
-    , score, hsDistance
-    = {gpsX, gpsY, distance}
+    , score, oldestAge, hotspotCutoff
+
+    = {gpsX, gpsY, beaconRange}
     , beaconPings[lastPingIndex]
-    , {}
+    , {}, {}
+    , #hotSpots
 
   if oldPing then
-    pingDistance 
-      = getDistance2d(newPing,oldPing)
-      -- = sqrt((newPing[1]-oldPing[1])^2 + (newPing[2]-oldPing[2])^2)
-    if pingDistance<200 then return end
+    if getDistance2d(newPing,oldPing)<200 then 
+      adjustHotspots(gpsX, gpsY, beaconRange)
+      return
+    end
   end
 
   -- let's keep some older pings around as "extra pings"
@@ -177,40 +259,52 @@ addBeaconPing = function(gpsX,gpsY,distance)
   lastPingIndex = (lastPingIndex % maxPings) + 1
   beaconPings[lastPingIndex] = newPing
 
-  hotSpots, hotSpotMaxScore = {}, 1
-  for b1 = 1, #beaconPings do
-    x1, y1, r1
-      = unpack(beaconPings[b1])
-    for b2 = b1+1, #beaconPings do
-      --local x2, y2, r2 = unpack(beaconPings[b2])
-      h1, h2 = getCircleIntersections(x1, y1, r1, unpack(beaconPings[b2]))      
+  hotSpotMaxScore = 1
+  
+  for i, otherPing in ipairz(beaconPings) do
+    -- skip over the current ping, compare to all the rest
+    if i~=lastPingIndex then
+      h1, h2 = getCircleIntersections(newPing, otherPing)      
       
       -- if h1 is nil, the array length doesn't increase anyway
       hotSpots[#hotSpots+1] = h1
       hotSpots[#hotSpots+1] = h2
+      newSpots[#newSpots+1] = h1
+      newSpots[#newSpots+1] = h2
     end
   end
-  for i, hotSpot in ipairs(hotSpots) do
-    score = -2 
-    -- Every hotspot should have 2 pings it matches perfectly
-    -- which will raise the score to 0
-    for i2, ping in ipairs(beaconPings) do
-      hsDistance = ping[3] - getDistance2d(ping,hotSpot)
-      --sqrt(
-      --  (ping[1]-hotSpot[1])^2 
-      --  + (ping[2]-hotSpot[2])^2)
-      --score = score + max(0, 1 - abs(hsDistance/200))^3
-      hsDistance = max(100, abs(hsDistance))
-      score = score + 100/hsDistance
+  
+  for i, otherPing in ipairz(beaconPings) do
+    -- skip over the current ping, compare to all the rest
+    if i~=lastPingIndex then
+      adjustHotspots(otherPing[1], otherPing[2], otherPing[3], newSpots)
     end
-    hotSpot[3] = score --^2
-    hotSpotMaxScore = max(score, hotSpotMaxScore)
   end
-  reverseSortTableOnElement(hotSpots,3) -- > reverse sort, largest first on score
-  for i, hotSpot in ipairs(hotSpots) do
+  
+  adjustHotspots(gpsX, gpsY, beaconRange)
+  reverseSortTableOnElement(hotSpots,4) -- > reverse sort on age, oldest first
+
+  --oldestAge = hotSpots[1][4]
+  hotspotCutoff = 1
+  while hotSpots[hotspotCutoff] 
+    and hotSpots[hotspotCutoff][4] > 15 
+    --and hotSpot[hotspotCutoff][4] = oldestAge
+    do hotspotCutoff = hotspotCutoff + 1
+  end
+  hotSpots = {unpack(hotSpots, hotspotCutoff)}
+
+
+  reverseSortTableOnElement(hotSpots,3) -- > reverse sort on score, largest first
+
+  while #hotSpots > 30 do
+    hotSpots[#hotSpots]=nil
+  end
+
+  --[[
+  for i, hotSpot in ipairz(hotSpots) do
     if hotSpot[3]*2>hotSpotMaxScore then
       nearBlob={100000,0,0,0,0,200,1}
-      for i, blob in ipairs(blobs)  do
+      for i, blob in ipairz(blobs)  do
         -- find the blob closest to this hotspot
         blob[6] = getDistance2d(hotSpot,blob)
         if blob[6]<nearBlob[6] then
@@ -230,9 +324,9 @@ addBeaconPing = function(gpsX,gpsY,distance)
       nearBlob[8]=nearBlob[3] -- need a second copy of score for aging
     end
   end
-  
+  --]]
 
-  for i, boi in ipairs(strongBois) do
+  for i, boi in ipairz(strongBois) do
     -- add to boi age
     boi[7] = boi[7] + 1
     -- reduce score with age
@@ -273,13 +367,13 @@ minTicks	maxTicks	Meters	min*50-200	max*50-200	avg illy method
 200	209	10000	9800	10250	10025
 --]]
 
---[ [
+--[[
 addBeaconPing(100,100,3000)
 addBeaconPing(0,3000,2300)
 addBeaconPing(3000,0,2300)
 addBeaconPing(200,200,2900)
 addBeaconPing(200,200,29000)
---] ]
+--]]
 
 function onTick()  
   for i=1,32 do
@@ -290,15 +384,15 @@ function onTick()
   end
 
 
-	W,H,tx,ty,tx2,ty2 -- 1-6
-    , _, _, _, _ -- 7-10 pilot input axes
-    , gx,gy,alt,dir,_ -- 11-14, 15=forwardSpeed
-    , inputX, inputY -- 16,17
+	--W,H,tx,ty,tx2,ty2 -- 1-6
+  --  , _, _, _, _ -- 7-10 pilot input axes
+    gx,gy,alt,dir,_ -- 11-14, 15=forwardSpeed
+    , _, _ -- 16,17
     , mapX, mapY, mapZoom -- 18-20
     , _, _, _, _, _ -- 21-25
     , _ -- 26
     , buoyData[1], buoyData[2], buoyData[3] -- 27 - 29
-    = unpack(I)
+    = unpack(I, 11)
 
 	if gx == nil then return true end
   
@@ -307,29 +401,43 @@ function onTick()
 
   
   -- detectors[] layout
-  -- {inputChannel, pulseOn}
+  -- {inputChannel, pulseOn, quietCounter, lastTickCount, lastDistance}
   -- detectors at init:
   -- , {{26},{27}}
 
 	beaconPulse = Ib[26]
-	
-  if beaconPulse then
-    if beaconQuietCounter>0 then
-      lastBeaconDistance = beaconQuietCounter * 50 - 200
-      lastBeaconTicks = beaconQuietCounter
+  -- actually, let's have lots of beacon detectors:
 
-      lastGroundDistance = sqrt(lastBeaconDistance^2 - alt^2)
+  for i, detector in ipairz(detectors) do
+    local channel, pulseOn, quietCounter, pingTickCount, pingDistance
+      = unpack(detector)
+    pulseOn = Ib[channel]
+    quietCounter = quietCounter or 0
+    detector[2] = pulseOn
+    if pulseOn then
+      if quietCounter>0 then
+        pingDistance = quietCounter * 50 - 200
+        pingTickCount = quietCounter
+        
+        lastBeaconDistance = pingDistance
+        lastBeaconTicks = pingTickCount
+        lastGroundDistance = sqrt(lastBeaconDistance^2 - alt^2)
 
-      if lastBeaconDistance > 300 then
-        --addBeaconPing(gx, gy, lastBeaconDistance)
-        addBeaconPing(gx, gy, lastGroundDistance)
+        detector[4], detector[5]
+          = pingTickCount, pingDistance
+
+        if lastBeaconDistance > 300 then
+          --addBeaconPing(gx, gy, lastBeaconDistance)
+          addBeaconPing(gx, gy, lastGroundDistance)
+        end
+        quietCounter = 0
       end
-    end  
-		beaconQuietCounter = 0     
-  else
-    beaconQuietCounter = beaconQuietCounter + 1
+    else
+      quietCounter = quietCounter + 1
+    end
+    detector[3] = quietCounter
   end
-
+	
   -- already done:
   --Ob[26] = beaconPulse
   O[26] = lastBeaconDistance
@@ -354,8 +462,7 @@ function onDraw()
 
   --[ [
   local betterCircle = function(x,y,r,steps)
-    drawCircle(x,y+5,r)
-    --r = min(r,200)
+    --drawCircle(x,y+5,r)
     steps = min(2000, floor(steps or (r*2)))
     --print(" ** Circle steps: ", steps)
     if x+r<0 or x-r>w

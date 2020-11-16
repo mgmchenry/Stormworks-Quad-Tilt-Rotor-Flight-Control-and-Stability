@@ -43,6 +43,8 @@ setColor,drawLine,drawCircle,drawCircleF,drawRectF,drawTriangleF,drawText,drawTe
 ]]
 propValues["ArkGF0"] = 
 "map.screenToMap,map.mapToScreen,input.getNumber,input.getBool,output.setNumber,output.setBool,string.format"
+propValues["ArkMF0"] =
+"abs,min,max,sqrt,ceil,floor,sin,cos,atan,pi"
 
 --dofile("QuadFlightControl.V0.07.15.lua")
 --dofile("ScaleController.V2.lua")

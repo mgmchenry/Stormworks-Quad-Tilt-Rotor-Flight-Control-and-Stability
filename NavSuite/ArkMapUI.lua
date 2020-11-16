@@ -23,6 +23,7 @@ end
 -- V 01.03a Michael McHenry 2020-11-10
 -- Minifies to 3,793 ArkNav01x02a
 -- Pony IDE testSim https://lua.flaffipony.rocks/?id=_uM_iSyvu
+-- https://lua.flaffipony.rocks/?id=i-dL_XsU6
 -- Adapted from Tajin's excellent navigation map to allow additional overlays
 -- and to be usable on 2x2 monitors
 source={"ArkNav01x03a","repl.it/@mgmchenry"}
