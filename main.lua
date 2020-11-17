@@ -2,6 +2,50 @@
 -- V 0.4 Michael McHenry 2019-06-07
 os.execute("clear")
 
+--
+-- strict.lua
+-- checks uses of undeclared global variables
+-- All global variables must be 'declared' through a regular assignment
+-- (even assigning nil will do) in a main chunk before being used
+-- anywhere or assigned to inside a function.
+--
+local mt = getmetatable(_G)
+if mt == nil then
+  mt = {}
+  setmetatable(_G, mt)
+end
+
+__STRICT =
+  -- true
+  false
+  
+mt.__declared = {}
+
+mt.__newindex = function (t, n, v)
+  if __STRICT and not mt.__declared[n] then
+    local w = debug.getinfo(2, "S").what
+    if w ~= "main" and w ~= "C" then
+      --error
+      print("assign to undeclared variable '"..n.."'", 2)
+    end
+    mt.__declared[n] = true
+  end
+  rawset(t, n, v)
+end
+  
+mt.__index = function (t, n)
+  if not mt.__declared[n] and debug.getinfo(2, "S").what ~= "C" then
+    --error
+    print("variable '"..n.."' is not declared", 2)
+  end
+  return rawget(t, n)
+end
+
+function global(...)
+   for _, v in ipairs{...} do mt.__declared[v] = true end
+end
+
+
 inValues, outValues, inBools, outBools = {}, {}, {}, {}
 table.unpack = table.unpack or unpack
 
@@ -42,7 +86,7 @@ propValues["ArkSF0"] =
 setColor,drawLine,drawCircle,drawCircleF,drawRectF,drawTriangleF,drawText,drawTextBox,getWidth,getHeight
 ]]
 propValues["ArkGF0"] = 
-"map.screenToMap,map.mapToScreen,input.getNumber,input.getBool,output.setNumber,output.setBool,string.format"
+"map.screenToMap,map.mapToScreen,input.getNumber,input.getBool,output.setNumber,output.setBool,string.format,type"
 propValues["ArkMF0"] =
 "abs,min,max,sqrt,ceil,floor,sin,cos,atan,pi"
 

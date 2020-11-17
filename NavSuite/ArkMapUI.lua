@@ -22,11 +22,12 @@ end
 -- Stormworks Ark NavSuite MapUI Controller
 -- V 01.03a Michael McHenry 2020-11-10
 -- Minifies to 3,793 ArkNav01x02a
+--             3,894 ArkNav01x04a
 -- Pony IDE testSim https://lua.flaffipony.rocks/?id=_uM_iSyvu
 -- https://lua.flaffipony.rocks/?id=i-dL_XsU6
 -- Adapted from Tajin's excellent navigation map to allow additional overlays
 -- and to be usable on 2x2 monitors
-source={"ArkNav01x03a","repl.it/@mgmchenry"}
+source={"ArkNav01x04c","repl.it/@mgmchenry"}
 
 local G, prop_getText, gmatch, unpack
   , commaDelimited
@@ -77,7 +78,8 @@ local abs, min, max, sqrt
   , ceil, floor
   , sin, co, atan, pi
   = getTableValues(math,gmatch(
-    "abs,min,max,sqrt,ceil,floor,sin,cos,atan,pi"
+    prop_getText("ArkMF0")
+    --"abs,min,max,sqrt,ceil,floor,sin,cos,atan,pi"
     , commaDelimited))
   
 local C, dL, drawCircle, drawCircleF
@@ -103,7 +105,8 @@ local screenToMap, mapToScreen
     --"map.screenToMap,map.mapToScreen,input.getNumber,input.getBool,output.setNumber,output.setBool,string.format"
     , commaDelimited))
 
--- test custom implementation   
+-- test custom implementation
+--[[
 screenToMap =
 function(mapX, mapY, zoom, screenW, screenH, pixelX, pixelY) 
   screenW = max(screenW, 1)
@@ -121,6 +124,7 @@ function(mapX, mapY, zoom, screenW, screenH, worldX, worldY)
   screenX, screenY = (worldX - mapX) / zoom + screenW / 2, screenH / 2 - (worldY - mapY) / zoom
   return screenX, screenY
 end
+--]]
 
 function clamp(a,b,c) return min(max(a,b),c) end
 --function getN(...)local a={}for b,c in ipairs({...})do a[b]=getNumber(c)end;return unpack(a)end
@@ -133,6 +137,7 @@ local I, O, Ib, Ob -- input/output tables
   , wayInfo, selX, selY
   , triMarkerSize
   , homeButtonHeight, centerOnGPS
+  , screenIsBig, scrollWidth
   , lastTouchTick
   , lastInputX, lastInputY
   , inputX, inputY
@@ -144,8 +149,9 @@ local I, O, Ib, Ob -- input/output tables
   , {10,100,500,1000,2500,5000}, 100
   , {5,4,3,2,1,1}, 4, {}, 0
   , {}, 0, 0
-  , 15
-  , 7, true
+  , 15 -- triMarkerSize
+  , 9, true -- homeButtonHeight, centerOnGPS
+  , true, 13 -- screenIsBig, scrollWidth
   , 0 -- lastTouchTick
   , 0, 0
   , 0, 0
@@ -199,6 +205,10 @@ function onTick()
     wx,wy,Fx,Fy,Fz = gx,gy,gx,gy,zoom 
   end
 
+  screenIsBig = W>32
+  scrollWidth = screenIsBig and 10 or 5
+  triMarkerSize = screenIsBig and 15 or 7
+
 	--if swp>0 and swp<=#wp then sel=swp end
 
 	lastTouchTick = lastTouchTick + 1
@@ -206,7 +216,7 @@ function onTick()
 			
 	if t2 and not t then
     -- if ty < 13 find selected nav index
-    ttx = ty<13 and
+    ttx = ty<13 and screenIsBig and
       ceil((tx-11)/13)
       or 0
 
@@ -215,14 +225,15 @@ function onTick()
       and 0
       or ttx
 
-		if tx < 10 and ty < homeButtonHeight then
+		if tx < scrollWidth and ty < homeButtonHeight then
       -- if already using centerOnGPS set selected waypoint to 0
       sel = centerOnGPS and 0 or sel
       centerOnGPS = true
-    elseif tx < 10 then
-			tz = ty - homeButtonHeight
-			Fz = sin((tz/(h-homeButtonHeight))^2*pi/2)*50
-      --sin((tz/H-homeButtonHeight)^2*pi/2)*50
+    elseif tx < scrollWidth then
+      Fz = (ty - homeButtonHeight) / (h - homeButtonHeight)
+      --Fz = sin(Fz^2*pi/2) * 50
+      Fz = Fz^2 * 50
+
 			i = 1
 			while Fz>zooms[i] do i=i+1 end
 			grid = grids[i]
@@ -357,7 +368,7 @@ function onDraw()
 	end
 
   -- boxes are at 13 and 50
-  local hereBoxX, thereBoxX = 60, 13
+  local hereBoxX, thereBoxX = 60, screenIsBig and 13 or 80
   if centerOnGPS then
     hereBoxX, thereBoxX = thereBoxX, hereBoxX
   end
@@ -366,26 +377,40 @@ function onDraw()
     dRF(8,0,2,h)
     C(0,0,0,200)
     --setColor() -- black is default
-    dRF(0,homeButtonHeight,8,h)
-    dRF(58,h-19,45,16)
-    dRF(11,h-19,45,16)
-    dTxB(105,h-19,w-110,15,format("grid:%.0f  scale:%.1f",grid,zo),-1,1)
 
+    -- Zoom slider background
+    dRF(0,homeButtonHeight,scrollWidth-2,h)
+
+    if screenIsBig then
+      dRF(58,h-19,45,16)
+      dRF(11,h-19,45,16)
+      dTxB(105,h-19,w-110,15,format("grid:%.0f  scale:%.1f",grid,zo),-1,1)
+    end
+
+    -- Draw zoom slider:
     C(255,150,0)
     --setColor(yellow)
-    dL(1,tz+homeButtonHeight,7,tz+homeButtonHeight)
+    --[[
+    Now to find tz from Fz in the reverse of how it was calculated
+    To account for display size changes. In onTick:    
+      Fz = (ty - homeButtonHeight) / (h - homeButtonHeight)
+      --Fz = sin(Fz^2*pi/2) * 50
+      Fz = Fz^2 * 50
+    --]]
+    tz = sqrt(Fz/50) * (h - homeButtonHeight) + homeButtonHeight
+    dL(1,tz,scrollWidth-2,tz)
     dTxB(105,h-20,w-110,15,format("grid:%.0f  scale:%.1f",grid,zo),-1,1)
     dTxB(thereBoxX,h-20,45,15,format("x:%.0f\ny:%.0f",wx,wy),-1,1)
 
     -- draw home button in green (gps follow) or grey(click for gps follow)
 		C(0,sel==0 and 150 or 0,0,220)
-		dRF(0, 0, 8, homeButtonHeight-2)
+		dRF(0, 0, scrollWidth, homeButtonHeight-2)
   end
 	
 	vx,vy = mapToScreen(mx,my,zo,w,h,gx,gy)
 	r = dir*pi*-2
 	
-	if vx<10 or vx>w or vy<0 or vy>h then
+	if vx<scrollWidth or vx>w or vy<0 or vy>h then
 		C(200,0,0)
     --setColor(red)
 		vx = clamp(vx,12,w-3)
@@ -414,18 +439,19 @@ function onDraw()
 		end
 	end
 
-  dTx(13,h-26,format("d:%.0f c:%.0f",outDis,outCourse))
+  text = screenIsBig and format("d:%.0f c:%.0f",outDis,outCourse) or ""
+  dTx(13,h-26,text)
 
   if w==W then
     C(0,0,0,50)
     --setColor(black,50)
-    dL(10,cy+1,cx-5,cy+1)
+    dL(scrollWidth,cy+1,cx-5,cy+1)
     dL(cx+1,0,cx+1,cy-5)
     dL(cx+6,cy+1,w,cy+1)
     dL(cx+1,cy+6,cx+1,h)
     C(255,255,255,50)
     --setColor(white,50)
-    dL(10,cy,cx-5,cy)
+    dL(scrollWidth,cy,cx-5,cy)
     dL(cx,0,cx,cy-5)
     dL(cx+6,cy,w,cy)
     dL(cx,cy+6,cx,h)
@@ -447,7 +473,7 @@ function onDraw()
 		if i>1 then	dL(ox,oy,lx,ly) end
 		C(0,i==sel and 150 or 0,0,220)
 		drawCircle(ox,oy,sz)
-		if w==W then
+		if w==W and screenIsBig then
 			dRF(-2+i*13,2,10,10)
 			C(255,255,255)
       --setColor(white)
@@ -455,7 +481,7 @@ function onDraw()
 		end
 		i=i+1
 	end
-	if w==W then
+	if w==W and screenIsBig then
 		C(0,0,0,200)
     --setColor(black)
 		dRF(-2+i*13,2,10,10)

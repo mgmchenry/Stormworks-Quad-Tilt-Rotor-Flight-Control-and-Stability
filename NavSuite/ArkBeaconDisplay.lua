@@ -6,7 +6,7 @@
 --             3646 ArkNavB01x06a
 --             3703 ArkNavB01x06d
 --             4139 ArkNavB01x06e (4094 without source id)
-source={"ArkNavB01x06e","repl.it/@mgmchenry"}
+source={"ArkNavB01x07a","repl.it/@mgmchenry"}
 
 local G, prop_getText, gmatch, unpack
   , ipairz
@@ -47,10 +47,13 @@ function(text, local_returnVals)
 end
 --]]
 
-local abs, min, max, sqrt
+local tableType
+  , abs, min, max, sqrt
   , ceil, floor
   , sin, cos, atan, pi
-  = getTableValues(math,gmatch(
+
+  = "table"
+  , getTableValues(math,gmatch(
     prop_getText("ArkMF0")
     --"abs,min,max,sqrt,ceil,floor,sin,cos,atan,pi"
     , commaDelimited))
@@ -68,17 +71,27 @@ local C, drawLine, drawCircle, drawCircleF
 local screenToMap, mapToScreen
   , getNumber, getBool
   , setNumber, setBool
-  , format
+  , format, type
 
-  , clamp
+  , clamp, inject
 
   = getTableValues(G,gmatch(
     prop_getText("ArkGF0")
-    --"map.screenToMap,map.mapToScreen,input.getNumber,input.getBool,output.setNumber,output.setBool,string.format"
+    --"map.screenToMap,map.mapToScreen,input.getNumber,input.getBool,output.setNumber,output.setBool,string.format,type"
     , commaDelimited))
    
 
 function clamp(a,b,c) return min(max(a,b),c) end
+function inject(destination, ...)
+  destination = destination or {}
+  for i, stuffing in ipairz({...}) do
+    stuffing = type(stuffing)==tableType and stuffing or {stuffing}
+    for i2=1,#stuffing do
+      destination[#destination+1] = stuffing[i2]
+    end
+  end
+  return destination
+end
 
 local I, O, Ib, Ob -- input/output tables
   , mapX, mapY, mapZoom
@@ -116,18 +129,19 @@ function getDistance3d(p1, p2)
 end
 function reverseSortTableOnElement(someTable, elementIndex)
   table.sort(someTable, function (s1, s2) 
-    return s1[elementIndex] > s2[elementIndex] end) -- > reverse sort, largest first
+    return (s1[elementIndex] or 0) > (s2[elementIndex] or 0) end) -- > reverse sort, largest first
 end
 
 function getCircleIntersections(x1,y1,r1,x2,y2,r2)
   -- or ({x1,y1,r1},{x2,y2,r2})
-  if type(x1)=="table" then
+  if type(x1)==tableType then
     x2, y2, r2 = unpack(y1)
     x1, y1, r1 = unpack(x1)
   end
 
   local distance
-    , aSide, bSide, oSide, aX, aY, oX, oY, p1, p2
+    , returnSpots
+    , aSide, bSide, oSide, aX, aY, oX, oY
     --= sqrt((x1-x2)^2 + (y1-y2)^2)
     = getDistance2d({x1,y1},{x2,y2})
 
@@ -149,16 +163,17 @@ function getCircleIntersections(x1,y1,r1,x2,y2,r2)
   oX = ( y1 - y2 ) * oSide / distance
   oY = ( x2 - x1 ) * oSide / distance
 
-  if abs(abs(r1-r2) - distance) < 400 then
+  -- calculated intersection points:
+  returnSpots = {{aX+oX,aY+oY}, {aX-oX,aY-oY}}
+
+  if abs(abs(r1+r2) - distance) < 150 then
     -- this creates a huge smear effect where a smaller circle 
     -- is touching the edge of the larger circle it is inside
-    p1 = {aX,aY}
-    p2 = {aX,aY}
-  else
-    p1, p2 = {aX+oX,aY+oY}, {aX-oX,aY-oY}
+    -- adding double spots for the center which is more likely correct
+    inject(returnSpots, {{aX,aY}, {aX,aY}})
   end
 
-  return p1, p2
+  return returnSpots
 end
 
 adjustHotspots = function(gpsX, gpsY, beaconRange, specificSpots, ageRate)
@@ -222,6 +237,9 @@ adjustHotspots = function(gpsX, gpsY, beaconRange, specificSpots, ageRate)
         hotSpot[5] = valueWeight
         hotSpot[3] = hotSpot[3] + otherSpot[3]
         hotSpot[4] = 0 -- reset age so it sticks around
+        otherSpot[4] = 100 -- reset age so it sticks around
+        otherSpot[5] = 0
+        otherSpot[3] = 0
       end
     end
   end
@@ -244,7 +262,9 @@ addBeaconPing = function(gpsX,gpsY,beaconRange)
     , #hotSpots
 
   if oldPing then
-    if getDistance2d(newPing,oldPing)<200 then 
+    if getDistance2d(newPing,oldPing)<200 
+    -- if stationary but beacon distance changes dramatically:
+    or abs(beaconRange-oldPing[3])>400 then 
       adjustHotspots(gpsX, gpsY, beaconRange)
       return
     end
@@ -264,15 +284,11 @@ addBeaconPing = function(gpsX,gpsY,beaconRange)
   for i, otherPing in ipairz(beaconPings) do
     -- skip over the current ping, compare to all the rest
     if i~=lastPingIndex then
-      h1, h2 = getCircleIntersections(newPing, otherPing)      
-      
-      -- if h1 is nil, the array length doesn't increase anyway
-      hotSpots[#hotSpots+1] = h1
-      hotSpots[#hotSpots+1] = h2
-      newSpots[#newSpots+1] = h1
-      newSpots[#newSpots+1] = h2
+      inject(newSpots, getCircleIntersections(newPing, otherPing))
     end
   end
+  
+  inject(hotSpots, newSpots)
   
   for i, otherPing in ipairz(beaconPings) do
     -- skip over the current ping, compare to all the rest
@@ -287,6 +303,7 @@ addBeaconPing = function(gpsX,gpsY,beaconRange)
   --oldestAge = hotSpots[1][4]
   hotspotCutoff = 1
   while hotSpots[hotspotCutoff] 
+    and #hotSpots > 20
     and hotSpots[hotspotCutoff][4] > 15 
     --and hotSpot[hotspotCutoff][4] = oldestAge
     do hotspotCutoff = hotspotCutoff + 1
@@ -296,9 +313,11 @@ addBeaconPing = function(gpsX,gpsY,beaconRange)
 
   reverseSortTableOnElement(hotSpots,3) -- > reverse sort on score, largest first
 
+  --[[
   while #hotSpots > 30 do
     hotSpots[#hotSpots]=nil
   end
+  --]]
 
   --[[
   for i, hotSpot in ipairz(hotSpots) do
@@ -391,13 +410,15 @@ function onTick()
     , mapX, mapY, mapZoom -- 18-20
     , _, _, _, _, _ -- 21-25
     , _ -- 26
-    , buoyData[1], buoyData[2], buoyData[3] -- 27 - 29
+    --, buoyData[1], buoyData[2], buoyData[3] -- 27 - 29
     = unpack(I, 11)
 
 	if gx == nil then return true end
   
+  --[[
   buoyData[4] = getDistance2d(buoyData, {gx, gy})
   buoyData[5] = getDistance3d(buoyData, {gx, gy, alt})
+  --]]
 
   
   -- detectors[] layout
@@ -535,7 +556,7 @@ function onDraw()
     C(255,0,0,255)
 		drawLine(pingX-2,pingY,pingX+2,pingY)
     drawLine(pingX,pingY-2,pingX,pingY+2)
-    if mapZoom<4 then
+    if mapZoom<4 and w > 16 then
       C(0,0,0,150)
       dTx(pingX + 3, pingY, format("%.0f", score))
     end
@@ -546,11 +567,13 @@ function onDraw()
     , lastBeaconDistance, lastBeaconTicks
     , lastGroundDistance )
   
+  --[[
   if buoyData[1]~=0 or buoyData[2]~=0 then
     text = text .. format("\nbuoy dist2d: %.0f\nbuoy dist3d: %.0f\nbuoy x/y/z: %.0f %.0f %.0f"
     , buoyData[4], buoyData[5]
     , buoyData[1], buoyData[2], buoyData[3])
   end
+  --]]
   C(200,200,200,200)
   dTx(96,20,text)
 end
