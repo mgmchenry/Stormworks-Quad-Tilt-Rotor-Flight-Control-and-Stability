@@ -27,7 +27,7 @@ end
 -- https://lua.flaffipony.rocks/?id=i-dL_XsU6
 -- Adapted from Tajin's excellent navigation map to allow additional overlays
 -- and to be usable on 2x2 monitors
-source={"ArkNav01x04c","repl.it/@mgmchenry"}
+source={"ArkNav01x04d","repl.it/@mgmchenry"}
 
 local G, prop_getText, gmatch, unpack
   , commaDelimited
@@ -199,9 +199,9 @@ function onTick()
     , inputX, inputY -- 16,17
     = unpack(I)
 
-	if gx == nil then return true end
+	if not(gx and W) then return end
 	if wx == nil then 
-    if gx==0 then return true end 
+    if gx==0 then return end 
     wx,wy,Fx,Fy,Fz = gx,gy,gx,gy,zoom 
   end
 
@@ -230,9 +230,9 @@ function onTick()
       sel = centerOnGPS and 0 or sel
       centerOnGPS = true
     elseif tx < scrollWidth then
-      Fz = (ty - homeButtonHeight) / (h - homeButtonHeight)
+      Fz = (ty - homeButtonHeight) / (H - homeButtonHeight)
       --Fz = sin(Fz^2*pi/2) * 50
-      Fz = Fz^2 * 50
+      Fz = clamp(Fz,0,1)^2 * 50
 
 			i = 1
 			while Fz>zooms[i] do i=i+1 end
@@ -393,7 +393,7 @@ function onDraw()
     --[[
     Now to find tz from Fz in the reverse of how it was calculated
     To account for display size changes. In onTick:    
-      Fz = (ty - homeButtonHeight) / (h - homeButtonHeight)
+      Fz = (ty - homeButtonHeight) / (H - homeButtonHeight)
       --Fz = sin(Fz^2*pi/2) * 50
       Fz = Fz^2 * 50
     --]]

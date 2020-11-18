@@ -16,8 +16,8 @@ if mt == nil then
 end
 
 __STRICT =
-  -- true
-  false
+   true
+  -- false
   
 mt.__declared = {}
 
