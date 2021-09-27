@@ -1,3 +1,4 @@
+-- for Ark Pilot Input Combiner V3x03
 local _i, _o, _s, _m
   , _tonumber, unpack, ipairz
   = input, output, string, math
@@ -17,9 +18,7 @@ local outLines
   , valueBuffers
   , bufferLength, bufferPosition
 
-  -- uninitialized variables:
   , pilotInputs, pilotOutputs
-
 
   -- minified function names
   , writeLine, expand
@@ -38,6 +37,8 @@ local outLines
     , {lineDef={{255,128,128},-1,2}}  -- customAxisValue
     }
   , 30, 0
+
+  , {}, {} -- seatInputs, pilotOutputs
   
 writeLine = function(text)
 	text = text or ""
@@ -93,9 +94,17 @@ getSmoothedValue = function(valueBuffer, smoothTicks, delayTicks)
   moduloCorrect(
     diffSum / smoothTicks + (baseValue or 0)
     ,nil ,nil)
+endww
+
+function getSeatConfig(seatId)
 end
 
 function onTick()
+  local seat
+  for i = 1, 4 do
+    seat = 
+  end
+
 	local screenX
     , screenY
     , inputX

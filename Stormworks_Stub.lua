@@ -1,11 +1,9 @@
 _ENV = _G
 
--- why is repl.it on Lua 5.1 still?
-pack = pack or function(...)
-  return { n = select("#", ...), ... }
-end
-
 table.pack = table.pack or pack
+pack,unpack = nil, nil
+
+local pack, unpack = table.pack, table.unpack
 
 __debug = {
   AlertIf = function (condition, ...)
@@ -53,6 +51,9 @@ __debug = {
 }
 
 __debug.lastFuncCall.print = function(text)
+  assert(type(__debug)=="table")
+  assert(type(__debug.lastFuncCall=="table"))
+  assert(type(__debug.lastFuncCall.messageTexts=="table"))
   local texts = __debug.lastFuncCall.messageTexts
   texts[#texts+1] = text
 end
@@ -165,8 +166,8 @@ screen = {
   drawTextBox=f("drawTextBox"),
   drawText=f("drawText"),
   setColor=f("setColor"),
-  getWidth=f("getWidth", function() return 98 end),
-  getHeight=f("getHeight", function() return 98 end),
+  getWidth=f("getWidth", function() return 96 end),
+  getHeight=f("getHeight", function() return 96 end),
   drawLine=f("drawLine"),
   setColor=f("setColor", nil, true),
   drawClear=f("drawClear"),
@@ -231,10 +232,24 @@ function onDraw()
   print("onDraw undefined")
 end
 
+function onTest(inValues, outValues, inBools, outBools, runTest)
+  for i=1,32 do
+    inValues[i]=0
+    outValues[i]=0
+    inBools[i]=false
+    outBools[i]=false
+  end
+
+  onTick()
+  onDraw()
+  runTest(function() onTick() end, "onTick")
+  runTest(function() onDraw() end, "onDraw")
+end
+
 function runTest(func, message)
   if message~=nil then print("Test call: "..message) 
   else message="" end
-  local status, err = pcall(func)
+  local status, err = xpcall(func, debug.traceback)
   if status then
     print("No Errors: Success!")
     print()
