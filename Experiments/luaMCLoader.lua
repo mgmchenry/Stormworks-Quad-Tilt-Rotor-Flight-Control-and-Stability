@@ -1,8 +1,10 @@
 local luaEnv = {
   package = package,
   dofile = dofile,
-  require = require
+  require = require,
+  print = print
 }
+--print = function() return end
 
 package = {}
 local preload, loaded = {}, {
@@ -51,6 +53,7 @@ do
   local debugText = {}
   local tickCount = 0
   local drawCount = 0
+  local maxDrawCount = 0
   local displayLine = 1
   local currentFile = nil
   
@@ -58,9 +61,10 @@ do
   local keyDown = 0
 
   local function run_onTick(...)
+    maxDrawCount, drawCount = drawCount, 0
     drawCount = 0
     tickCount = tickCount + 1
-    debugText = {"Tick: " .. tostring(tickCount)}
+    debugText = {} --"Tick: " .. tostring(tickCount)}
 
 
     local I, Ib = {}, {}    
@@ -81,6 +85,7 @@ do
 
     if string.sub(keySequence,1,3)=="666" and string.len(keySequence)<10 then
       -- allow keySequence to grow up to 10 chars
+      debugText[1] = {"Tick: " .. tostring(tickCount)}
       debugText[#debugText+1] = "keyCode: " .. keySequence
     elseif string.sub(keySequence,-3,-1)=="666" then
       keySequence = string.sub(keySequence,-3,-1) -- reset sequence to escape code
@@ -98,6 +103,7 @@ do
     if type(mc_onTick)=="function" then
       mc_onTick(...)
     else
+      debugText[1] = {"Tick: " .. tostring(tickCount)}
       debugText[#debugText+1] = "no onTick function"
     end
   end
@@ -112,7 +118,12 @@ do
 
   local function run_onDraw(...)
     drawCount = drawCount+1
-    debugText[1] = string.format("Tick: %i Draw: %i", tickCount, drawCount)
+	  if debugText[1] and string.sub(tostring(debugText[1]),1,4)=="Tick" then
+      debugText[1] = string.format("Tick: %i Draw: %i", tickCount, drawCount)
+    elseif drawCount==maxDrawCount then
+      debugText[1] = string.format("Tick: %i Draw: %i", tickCount, drawCount)	
+      debugText[2] = "keyCode: " .. keySequence
+    end
 
     local sWidth, sHeight
       = screen.getWidth()

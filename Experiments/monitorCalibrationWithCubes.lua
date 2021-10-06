@@ -28,7 +28,7 @@ function main()
 
   local I, O, Ib, Ob -- composite input/output tables
     , tickCounter
-    , screenCount, screensRendered, calibrationPoints, isCalibrating, touchDevices
+    , screenCount, screensRendered, uiState, isCalibrating, touchDevices
     , lastTriggerClick
     , playerLookX, playerLookY, lookTrigger, triggerClick
     = {},{},{},{}
@@ -36,14 +36,18 @@ function main()
     , 0, 0, {}, true, {}
     , {}
     
-  local createTouchInput, updateTouchInput
+  local createTouchInput, updateTouchInput, checkTouchStart
 
   local function init()
     -- input channels(touch1On, touch2On, width, height, touch1X, touch1Y, touch2X, touch2Y,deviceID)
     touchDevices[1] = createTouchInput(1,9,10,11,12,13,14,15,16)
     touchDevices[2] = createTouchInput(3,25,26,23,24,25,26,27,28)
-    touchDevices[3] = createTouchInput(2,17,18,17,18,19,10,21,22)
+    touchDevices[3] = createTouchInput(2,17,18,17,18,19,20,21,22)
   end
+
+  --[[ uiState:
+    { lastDeviceTouched, lastCornerTouched}
+  ]]
 
   function onTick()  
     screenCount = screensRendered
@@ -61,7 +65,36 @@ function main()
       lastTriggerClick = {playerLookX, playerLookY}
     end
     for i, touchDevice in ipairz(touchDevices) do
-      updateTouchInput(touchDevice)
+      local events, state, config, calibration
+        = updateTouchInput(touchDevice)
+      
+      local deviceID, pixWidth, pixHeight, meterWidth, meterHeight, corners 
+        = unpack(calibration)
+      
+      for j, corner in ipairz(corners or {}) do
+        local cornerId, cornerX, cornerY, avgLookX, avgLookY, samples
+          = unpack(corner)
+          
+        local touchResult = {}
+        if checkTouchStart(touchDevice, cornerX, cornerY, 2, 2, touchResult) then          
+          uiState[1], uiState[2], avgLookX, avgLookY
+            = i, j, 0, 0
+
+          --[[ event format: {touchIsPressed, touchWasPressed, touchX, touchY, touchTick, touchLookX, touchLookY, lastPressEvent{}, lastReleaseEvent{} } ]]
+          local touchX, touchY, _, touchLookX, touchLookY
+            = unpack(touchResult, 3)
+          if #samples>5 then
+            table.remove(samples, 1)
+          end
+          samples[#samples+1] = {touchX, touchY, touchLookX, touchLookY}
+          for _, sample in ipairz(samples) do
+            avgLookX, avgLookY
+              = avgLookX + sample[3] / #samples
+              , avgLookY + sample[4] / #samples
+          end
+          corner[4],corner[5] = avgLookX, avgLookY
+        end
+      end
     end
 
     for i=1,32 do -- load composite input array and copy to output array for pass-through
@@ -74,16 +107,16 @@ function main()
 
   do -- screen api available inside this block
     local F, setColor, drawLine, drawCircle, drawCircleF
-    , drawRectF,drawTriangleF,drawText,drawTextBox
+    , drawRect, drawRectF,drawTriangleF,drawText,drawTextBox
     , screen_getWidth, screen_getHeight  
     = 255, getTableValues(screen,--prop_getText("ArkSF0")
-      "setColor,drawLine,drawCircle,drawCircleF,drawRectF,drawTriangleF,drawText,drawTextBox,getWidth,getHeight")
+      "setColor,drawLine,drawCircle,drawCircleF,drawRect,drawRectF,drawTriangleF,drawText,drawTextBox,getWidth,getHeight")
 
     local cSolidWhite
       , cRed, cGreen, cBlue, cMagenta
       , cWhite, cBlack
       , screenWidth, screenHeight
-      , currentDrawColor
+      , currentDrawColor, textPosX, textPosY
 
       -- forward function references:
       , betterSetColor, betterSetAlpha, betterDrawRect, betterDrawLineRel
@@ -92,18 +125,30 @@ function main()
       = {F,F,F,F}, {F,0,0}, {0,F,0}, {0,0,F}, {F,0,F}
         , {F,F,F}, {0,0,0}
 
+    function printText(text, color)
+      drawText(textPosX, textPosY, text)
+      textPosY = textPosY+6
+    end
+
     function onDraw()
       screensRendered = screensRendered + 1
       screenCount = max(screensRendered, screenCount)
       screenWidth, screenHeight = screen_getWidth(), screen_getHeight()
 
       betterSetColor(cSolidWhite)
+      betterSetAlpha(.5)
       drawRectF(0, 0, screenWidth/2, screenHeight/2)
 
+      betterSetAlpha(1)
       betterSetColor(cBlue)
-      local posX, posY = 2, screenHeight / 2 + 1
-      drawTextBox(posX, posY, 10, 10, format("%i/%i" ,screensRendered, screenCount))
-      posY = posY+6
+      textPosX, textPosY = 2, 4
+      printText(format("Screen %i/%i" ,screensRendered, screenCount))
+      betterSetColor(lookTrigger and cGreen or cWhite)
+      printText(format("%.2f,%.2f", playerLookX*360, playerLookY*360))
+      
+      if lastTriggerClick and lastTriggerClick[1] then
+        printText( format("%.2f,%.2f", lastTriggerClick[1]*360, lastTriggerClick[2]*360))
+      end
 
       do
         local touchDevice = touchDevices[screensRendered]
@@ -111,27 +156,11 @@ function main()
         local deviceID, pixWidth, pixHeight, meterWidth, meterHeight, corners
         = unpack(calibration or {})      
 
+        local lastDeviceTouched, lastCornerTouched = unpack(uiState)
+
         if pixWidth~=screenWidth or pixHeight~=screenHeight then
           --p rint("device not initialized")
         else
-          -- corner format: {X,Y, avgLookX, avgLookY, {samples}}
-          --[[ 
-            corners = {
-              {0.5,0.5,false,false,{}}
-              , {0.5,pixWidth-1.5,false,false,{}}
-              , {pixHeight-1.5,0.5,false,false,{}}
-              , {pixHeight-1.5,pixWidth-1.5,false,false,{}}
-            }
-          ]]
-
-          for i,corner in ipairz(corners) do
-            betterDrawRect(corner[1]-.5,corner[2]-.5,1,1, cRed)
-            betterDrawRect(corner[1]+.5,corner[2]-.5,1,1, cGreen)
-            betterDrawRect(corner[1]-.5,corner[2]+.5,1,1, cBlue)
-            betterDrawRect(corner[1]+.5,corner[2]+.5,1,1, cMagenta)
-          end
-          
-          --local touch1On, touch2On, width, height, touch1X, touch1Y, touch2X, touch2Y = unpack(state[4])
           for i, coord in ipairz({events[1], events[2]}) do
             local touchIsPressed, touchWasPressed, touchX, touchY
               , touchTick, touchLookX, touchLookY
@@ -140,38 +169,73 @@ function main()
               drawCursor(touchX, touchY, touchIsPressed)
             end
           end
+
+          for i,corner in ipairz(corners) do
+            local textWidth, cornerId, cornerX, cornerY, avgLookX, avgLookY, samples
+              = 5 * 5 + 2
+              , unpack(corner)
+
+            if screensRendered==lastDeviceTouched and lastCornerTouched==i then
+              printText(format("corner: %i,%i", cornerId[1], cornerId[2]))              
+              printText(format("lookX: %.4f", avgLookX*360))
+              printText(format("lookY: %.4f", avgLookY*360))
+              betterSetAlpha(.5)
+              betterDrawRect(cornerX-.5,cornerY-2.5,2,6, cGreen)    
+              betterDrawRect(cornerX-2.5,cornerY-.5,6,2, cGreen)
+            end            
+            
+            if #samples>0 then            
+              betterSetAlpha(min(#samples/4,1))
+              betterDrawRect(cornerX-1.5,cornerY-1.5,4,4, cWhite)
+            end
+            betterSetAlpha(1)
+            betterDrawRect(cornerX-.5,cornerY-.5,1,1, cRed)
+            betterDrawRect(cornerX+.5,cornerY-.5,1,1, cGreen)
+            betterDrawRect(cornerX-.5,cornerY+.5,1,1, cBlue)
+            betterDrawRect(cornerX+.5,cornerY+.5,1,1, cMagenta)
+
+            --[[
+            betterDrawRect(
+              cornerX-.5 - (cornerId[1]+1) * textWidth / 2              
+              , cornerY-.5 + ( (max(2,cornerId[2]+2)-2.5) * -5.5*2 - 3.5)
+              , textWidth, 7, cBlue)
+            betterSetColor(cWhite)
+            drawTextBox(
+              cornerX-.5 - (cornerId[1]+1) * textWidth / 2              
+              , cornerY-.5 + ( (max(2,cornerId[2]+2)-2.5) * -5.5*2 - 3.5)
+              , textWidth, 7
+              , format("%i,%i", cornerId[1], cornerId[2])
+              )
+            ]]
+          end
+          
           
         end
       end
 
-      betterSetColor(lookTrigger and cGreen or cWhite)
-      drawText(posX, posY, format("%.2f,%.2f", playerLookX*360, playerLookY*360))
-      posY = posY+6
-      if lastTriggerClick and lastTriggerClick[1] then
-        drawText(posX, posY, format("%.2f,%.2f", lastTriggerClick[1]*360, lastTriggerClick[2]*360))
-        posY = posY+6
-      end
     end
     --[[ End onDraw]]
 
-    function drawCursor(touch1X, touch1Y, touch1On)
-      betterSetAlpha(128)
-      betterDrawLineRel(touch1X-1,touch1Y-1,-2,0,cRed)
+    function drawCursor(touchX, touchY, touchOn)
+      betterSetAlpha(.5)
+      --[[betterDrawLineRel(touch1X-1,touch1Y-1,-2,0,cRed)
       betterDrawLineRel(touch1X-1,touch1Y-1,0,-2,cRed)
       betterDrawLineRel(touch1X+1,touch1Y+1,0,2,cMagenta)
       betterDrawLineRel(touch1X+1,touch1Y+1,2,0,cMagenta)
       betterDrawLineRel(touch1X-1,touch1Y+1,-2,2,cBlue)
       betterDrawLineRel(touch1X+1,touch1Y-1,2,-2,cGreen)
-      if touch1On then
-        betterDrawLineRel(touch1X-1,touch1Y,3,0,cWhite)
-        betterDrawLineRel(touch1X,touch1Y-1,0,3,cWhite)
+      ]]
+      betterDrawLineRel(touchX,touchY,0,0,cWhite)
+      if touchOn then
+        betterDrawLineRel(touchX-1,touchY-1,2,2,cWhite)
+        betterDrawLineRel(touchX-1,touchY+1,2,-2,cWhite)
       end
 
-      betterSetAlpha(F)
+      betterSetAlpha(1)
     end
     
     function betterSetAlpha(a)
-      currentDrawColor[4] = a
+      currentDrawColor[4] = a * F
       setColor(unpack(currentDrawColor))
     end
 
@@ -188,7 +252,7 @@ function main()
       l_dis = sqrt(w*w + h*h)
       if l_dis<1 then
         w,h=x+w, y+h
-          + h>0 and 1 or -1
+          + (h>0 and 1 or -1)
       else
         w = x + w + w/l_dis
         h = y + h + h/l_dis
@@ -196,9 +260,13 @@ function main()
       drawLine(x,y,w,h)
     end
 
-    function betterDrawRect(x,y,w,h,color)
+    function betterDrawRect(x,y,w,h,color,filled)
       if color then betterSetColor(color) end
-      drawRectF(x,y,w,h)
+      if filled or w<2 or h<2 then
+        drawRectF(x,y,w,h)
+      else
+        drawRect(x,y,w-1,h-1)
+      end
     end
 
   end
@@ -217,6 +285,31 @@ function main()
     return newDevice
   end
 
+  -- forward function declarations:
+  local initCalibration
+
+  function checkTouchStart(touchDevice, left, top, width, height, result)
+    local events, state, config, calibration = unpack(touchDevice)
+
+    --[[ touchEvent format
+      {touchIsPressed, touchWasPressed, touchX, touchY, touchTick, touchLookX, touchLookY,
+          , lastPressEvent{} 
+          , lastReleaseEvent{} }
+    ]]
+    for i, coord in ipairz({events[1], events[2]}) do    
+      local touchIsPressed, touchWasPressed, touchX, touchY = unpack(coord)
+      if touchIsPressed and not touchWasPressed then
+        -- this is new press this tick
+        if touchX>=left-0.5 and touchX<left+width-0.5
+          and touchY>=top-0.5 and touchY<top+height-0.5 then
+          -- this event is inside the hitbox. Return full copy of lastPressEvent
+          return plop(false, result, coord[8])
+
+        end
+      end
+    end
+  end
+
   function updateTouchInput(touchDevice)
     local events, state, config, calibration = unpack(touchDevice)
 
@@ -230,10 +323,14 @@ function main()
     --state[5] = state[4] or touchState
     --state[4] = touchState
 
+    
+    initCalibration(calibration, width, height)
+
     for i, updateState in ipairz(
-    { {touch1On, touch1X, touch1Y}
-    , {touch2On, touch2X, touch2Y}
-    }) do
+        { {touch1On, touch1X, touch1Y}
+        , {touch2On, touch2X, touch2Y}
+        }
+      ) do
       local event, newOn, newX, newY, oldOn
         , lastPressEvent, lastReleaseEvent, newState
         = events[i], unpack(updateState)
@@ -253,28 +350,57 @@ function main()
         events[i] = newState
         if newOn then
           -- save a copy of event state as lastPressEvent
-          event[8] = {unpack(newState)}
+          newState[8] = {unpack(newState)}
         else
           -- save a copy of event state as lastReleaseEvent
-          event[9] = {unpack(newState)}
+          newState[9] = {unpack(newState)}
         end
       end
     end
 
+    return events, state, config, calibration
+  end
+
+  function initCalibration(calibration, deviceWidth, deviceHeight)
+    --local events, state, config, calibration = unpack(touchDevice)
+
     local deviceID, pixWidth, pixHeight, meterWidth, meterHeight, corners = unpack(calibration)
-    if width>0 and (width%32)==0 -- this is a valid screen width
-     and width~=pixWidth then -- new calibration dimensions need to be initialized
-      pixWidth, pixHeight, meterWidth, meterHeight 
-        = width, height
-          , width/32, height/32
-      corners = {
-        {0.5,0.5,false,false,{}}
-        , {0.5,pixWidth-1.5,false,false,{}}
-        , {pixHeight-1.5,0.5,false,false,{}}
-        , {pixHeight-1.5,pixWidth-1.5,false,false,{}}
-      }
-      plop(false,calibration,{deviceID, pixWidth, pixHeight, meterWidth, meterHeight, corners})
+    if deviceWidth==0 or (deviceWidth%32)~=0 -- invalid screen width values
+      or deviceHeight==0 or (deviceHeight%32)~=0 -- invalid screen height values
+      or deviceWidth==pixWidth -- already initialized for this width
+      or deviceHeight==pixHeight -- already initialized for this height
+      then return -- nothing to do here
     end
+
+    pixWidth, pixHeight, meterWidth, meterHeight 
+      = deviceWidth, deviceHeight
+        , deviceWidth/32, deviceWidth/32
+    corners = {} --[[
+      { {-1,-1},0.5,pixWidth*0+1-0.5,false,false,{}}
+      , {-1,0},0.5,pixWidth*0.5+0-0.5,false,false,{}}
+      , {-1,1},0.5,pixWidth*1-1-0.5,false,false,{}}
+      , etc
+    ]]
+    for y = -1,1 do
+      for x = -1,1 do
+        -- if deviceWidth = 32 then corners at 
+        -- 0,1     - 15,16    - 30,31
+        -- 0.5     - 15.5     - 30.5
+        -- 0+1-0.5 - 16+0-0.5 - 32-1-0.5 
+
+        corners[x+5 + y*3] = 
+        -- {cornerId{}, cornerX, cornerY, avgLookX, avgLookX, samples{} }
+        {
+          {x,y}
+          , deviceWidth * (x+1)/2 - x - 0.5
+          , deviceHeight * (y+1)/2 - y - 0.5
+          , false, false, {}
+        }
+      end
+    end
+
+    plop(false,calibration,{deviceID, pixWidth, pixHeight, meterWidth, meterHeight, corners})
+
   end
 
   return init
@@ -370,5 +496,12 @@ function onTest(inValues, outValues, inBools, outBools, runTest)
   inValues[14] = 14
   
   runTest(function() onTick() end, "onTick with touch input")
+  runTest(function() onDraw() end, "onDraw")
+  
+  inBools[10] = true
+  inValues[15] = 1
+  inValues[16] = 1
+  
+  runTest(function() onTick() end, "onTick with calibration input")
   runTest(function() onDraw() end, "onDraw")
 end

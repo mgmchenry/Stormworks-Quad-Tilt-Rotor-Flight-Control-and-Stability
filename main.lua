@@ -115,10 +115,14 @@ local function enableStrictLua()
     if __STRICT and not mt.__declared[n] then
       local callerInfo = debug.getinfo(2, "S")
       if callerInfo==nil then
-        print("This is that thing I get at the end finally")
-        --print(debug.traceback())
-        printStackInfo(1,0)
-        print(t,n,v)
+        if string.sub(n,1,7)=="_PROMPT" then
+          --print("setting prompt on exit is normal")
+        else
+          print("attempt to assign undeclared variable and callerInfo is nil")
+          --print(debug.traceback())
+          printStackInfo(1,0)
+          print(t,n,v)
+        end
       elseif callerInfo.what ~= "main" and callerInfo.what ~= "C" then
         --error
         print("assign to undeclared variable '"..n.."'", 2)
