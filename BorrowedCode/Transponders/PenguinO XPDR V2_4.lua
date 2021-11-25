@@ -33,6 +33,77 @@ Due to being forced to use new antenna, the V1 requires 2 antennae to keep full-
 
 See XPDR v1 for Full-duplex built
 https://steamcommunity.com/sharedfiles/filedetails/?id=1775297695
+
+Logic connections
+Col1
+  XPDR In composite
+  GPS X In number
+  Altimeter In number
+Col2
+  XPDR Response out composite
+  GPS Y in number
+  Touchscreen composite in
+Col3
+  XMIT Signal bool out
+  Frequency number out
+  Monitor video out
+
+Freq locked to 1030mhz rcv, 1090mhz snd
+runs on 2 lua modules
+]]
+
+--[[
+  lua module for txmit logic:
+  bool[1] - trigger to send default callsign
+]]
+
+PATT = "          0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+function onTick()
+	if input.getBool(1) then
+		NICK = string.upper(property.getText("Default Callsign"))
+		TXT = {"", "", "", ""}
+
+		for i = 1, math.min(string.len(NICK), 12), 1 do
+			CHR = string.find(PATT, string.sub(NICK, i, i))
+			if CHR == nil then CHR = "00" end
+			TXT[((i-1)%4)+1] = TXT[((i-1)%4)+1]..string.format("%02.0f", CHR)
+		end
+
+		
+		output.setNumber(1, TXT[1])
+		output.setNumber(2, TXT[2])
+		output.setNumber(3, TXT[3])
+		output.setNumber(4, TXT[4])
+		output.setBool(1, true)
+			
+	else
+		output.setNumber(1, 0)
+		output.setNumber(2, 0)
+		output.setNumber(3, 0)
+		output.setNumber(4, 0)
+		output.setBool(1, false)
+	end
+end
+
+--[[
+  lua module for main logic
+  composite carrier from XPDR in
+
+  n_in[1-6]: Touch w,h,x1,y1,x2,y2
+  n_in[11-13]: GPSX, GPSY, Alt
+  n_in[16-19]: Stored callsign
+  n_in[27]: stored squawk
+
+  b_in[1-2]: Touch t1, t2
+
+  n_out[16-19]: Callsign out
+  b_out[16]: Store Callsign
+  b_out[30]: XMIT control
+
+  
+
+  mem storage for lua out squawk n_out[27] is disconnected for some(?) reason
 ]]
 
 UB = {0,0,1,0,0,
@@ -241,35 +312,4 @@ function PenguinDraw(s,y,w,BM)
 end
 
 
---[[
-  separate module for txmit logic:
-]]
 
-PATT = "          0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-function onTick()
-	if input.getBool(1) then
-		NICK = string.upper(property.getText("Default Callsign"))
-		TXT = {"", "", "", ""}
-
-		for i = 1, math.min(string.len(NICK), 12), 1 do
-			CHR = string.find(PATT, string.sub(NICK, i, i))
-			if CHR == nil then CHR = "00" end
-			TXT[((i-1)%4)+1] = TXT[((i-1)%4)+1]..string.format("%02.0f", CHR)
-		end
-
-		
-		output.setNumber(1, TXT[1])
-		output.setNumber(2, TXT[2])
-		output.setNumber(3, TXT[3])
-		output.setNumber(4, TXT[4])
-		output.setBool(1, true)
-			
-	else
-		output.setNumber(1, 0)
-		output.setNumber(2, 0)
-		output.setNumber(3, 0)
-		output.setNumber(4, 0)
-		output.setBool(1, false)
-	end
-end

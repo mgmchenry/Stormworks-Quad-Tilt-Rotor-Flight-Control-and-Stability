@@ -190,6 +190,7 @@ setColor,drawLine,drawCircle,drawCircleF,drawRectF,drawTriangleF,drawText,drawTe
 ]]
 propValues["ArkGF0"] = 
 "map.screenToMap,map.mapToScreen,input.getNumber,input.getBool,output.setNumber,output.setBool,string.format,type"
+
 propValues["ArkMF0"] =
 "abs,min,max,sqrt,ceil,floor,sin,cos,atan,pi"
 
@@ -199,8 +200,8 @@ propValues["ArkMF0"] =
 
 --dofile("FlightControl/QuadTiltFlightControl.V0.TinySig.lua")
 --dofile("Experiments/keyInputAxisInfo.lua")
---dofile("Experiments/monitorCalibrationWithCubes.lua")
 dofile("Experiments/loaderMC.lua")
+--dofile("ArkNet/ArkNetMCBootstrap.lua")
 --dofile("Experiments/CompositeDebugDisplay.lua")
 --dofile("Experiments/SWGlobals.lua")
 --dofile("NavSuite/ArkBeaconDisplay.lua")
