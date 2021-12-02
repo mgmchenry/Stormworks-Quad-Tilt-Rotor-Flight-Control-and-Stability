@@ -75,9 +75,38 @@ function main()
     return avgTable
   end
 
+  local function getPovIntersection(sample, other)  
+      -- y1 = x1 * sample.slopeH / sample.slopeV + sample.touchV
+      -- y2 = x2 * prevSlopeH / prevSlopeV + prevTouchV
+      -- so, intercept x is:
+      -- x * sample.slopeH / sample.slopeV + sample.touchV = x * prevSlopeH / prevSlopeV + prevTouchV
+      -- x * sample.slopeH / sample.slopeV = x * prevSlopeH / prevSlopeV + prevTouchV - sample.touchV
+      -- sample.slopeH / sample.slopeV = prevSlopeH / prevSlopeV + (prevTouchV - sample.touchV) / x
+      -- sample.slopeH / sample.slopeV - prevSlopeH / prevSlopeV = (prevTouchV - sample.touchV) / x
+      -- x = (prevTouchV - sample.touchV) / (sample.slopeH / sample.slopeV - prevSlopeH / prevSlopeV)
+      -- might be right?
+
+      -- so linear algebra then
+      --sample.interceptH = (prevTouchV - sample.touchV) / (sample.slopeH / sample.slopeV - prevSlopeH / prevSlopeV)
+      --sample.interceptV = sample.interceptH * prevSlopeH / prevSlopeV + prevTouchV
+
+      -- proven to work:
+      -- daH2 = (tan(a2)*kd) / (tan(a2)-tan(a1))
+      local kd, t1, t2, d2, interceptH, interceptV
+        = other.touchV - sample.touchV
+        , tan(sample.touchLookY * pi * 2)
+        , tan(other.touchLookY * pi * 2)
+      d2 = t2 * kd / (t2 - t1)
+      interceptV = other.touchV - d2
+      interceptH = -d2 / t2
+      return interceptH, interceptV
+  end
+
+  local selectedSample = {}
+
   local function calibration_addSample(deviceID, touchX, touchY, touchLookX, touchLookY, touchTick)    
-    local samples, newSample
-      = verticalCalibration.samples
+    local samples, sampleIndex, newSample
+      = verticalCalibration.samples, 0
       , {
         deviceID = deviceID
         , touchH = touchY -- X/Y : H/V are swapped
@@ -97,6 +126,7 @@ function main()
       if foundSample.touchV == newSample.touchV then
         --print("found matching touchV")
         --print("current sample: ", i, foundSample.touchV, unpack(foundSample))
+        sampleIndex = i
         local subSamples = foundSample.subSamples or {foundSample.touchLookY}
         newSample.subSamples = subSamples
         samples[i]=newSample
@@ -107,6 +137,8 @@ function main()
         end
         newSample.touchLookY = newSample.touchLookY / (#subSamples + 1)
         newSample.ssCount = #subSamples
+        newSample.fovHCursor = foundSample.fovHCursor or foundSample.fovH or 5
+        newSample.fovH = foundSample.fovH
         break      
       elseif foundSample.touchV > newSample.touchV then
         --print("next sample touchV is larger at index", i, foundSample.touchV, "vs", newSample.touchV)
@@ -115,49 +147,64 @@ function main()
         break
       elseif samples[i+1]==nil then
         --print("next sample is nil at index: ", i+1)
-        table.insert(samples,i+1,newSample)
+        sampleIndex = i + 1
+        samples[sampleIndex]=newSample        
         break
       end
     end
     if #samples==0 then
       --print("sample table is empty. Adding first entry")
-      samples[1]=newSample
+      sampleIndex = 1
+      samples[sampleIndex]=newSample
     end
+    selectedSample = newSample
     --print("sample count: " .. #samples)
     
     -- this table should not need sorting any more. will see if I messed it up?
     --table.sort(samples, function (s1, s2) return (s1.touchLookY or 0) > (s2.touchLookY or 0) end)
 
     -- recalc midpoints
+    local firstSample, lastSample
+      = max(1, sampleIndex - 6)
+      , min(#samples, sampleIndex + 6)
+
+    for i=firstSample, lastSample do
+      local testSample = samples[i]
+      local crossings, crossH, crossV, weight
+        = {}, 0, 0, 0
+        
+      local firstSample, lastSample
+        = max(1, i - 3)
+        , min(#samples, i + 3)
+      for i1=firstSample, lastSample-1 do
+        for i2=i1+1, lastSample do
+          local s1, s2, sWeight, sH, sV, sCross = samples[i1], samples[i2]
+          sWeight = 1 / (abs(abs(s1.touchV - s2.touchV) - 4) + 1)
+            + 1 / (abs(abs(testSample.touchV - s2.touchV) - 4) + 1)
+            + 1 / (abs(abs(s1.touchV - testSample.touchV) - 4) + 1)
+          sH, sV = getPovIntersection(s1,s2)
+          crossings[#crossings+1] = {sH, sV, sWeight}
+          weight = weight + sWeight 
+          crossH = crossH + sH * sWeight
+          crossV = crossV + sV * sWeight
+        end
+      end
+      crossH = crossH/weight
+      crossV = crossV/weight
+      crossings.weight = weight
+      crossings.crossH = crossH
+      crossings.crossV = crossV
+      testSample.crossings = crossings      
+    end
+
     local prevTouchV, prevTouchLookY, prevSlopeH, prevSlopeV = 0,0,0,0
     local prevIntercepts = {}
     for i, sample in ipairz(samples) do
       if i==1 then
         sample.midpoints = {}
       else
-        -- y1 = x1 * sample.slopeH / sample.slopeV + sample.touchV
-        -- y2 = x2 * prevSlopeH / prevSlopeV + prevTouchV
-        -- so, intercept x is:
-        -- x * sample.slopeH / sample.slopeV + sample.touchV = x * prevSlopeH / prevSlopeV + prevTouchV
-        -- x * sample.slopeH / sample.slopeV = x * prevSlopeH / prevSlopeV + prevTouchV - sample.touchV
-        -- sample.slopeH / sample.slopeV = prevSlopeH / prevSlopeV + (prevTouchV - sample.touchV) / x
-        -- sample.slopeH / sample.slopeV - prevSlopeH / prevSlopeV = (prevTouchV - sample.touchV) / x
-        -- x = (prevTouchV - sample.touchV) / (sample.slopeH / sample.slopeV - prevSlopeH / prevSlopeV)
-        -- might be right?
-
-        -- so linear algebra then
-        --sample.interceptH = (prevTouchV - sample.touchV) / (sample.slopeH / sample.slopeV - prevSlopeH / prevSlopeV)
-        --sample.interceptV = sample.interceptH * prevSlopeH / prevSlopeV + prevTouchV
-
-        -- proven to work:
-        -- daH2 = (tan(a2)*kd) / (tan(a2)-tan(a1))
-        local kd, t1, t2, d2
-          = prevTouchV - sample.touchV
-          , tan(sample.touchLookY * pi * 2)
-          , tan(prevTouchLookY * pi * 2)
-        d2 = t2 * kd / (t2 - t1)
-        sample.interceptV = prevTouchV - d2
-        sample.interceptH = -d2 / t2
+        sample.interceptH, sample.interceptV
+        = getPovIntersection(sample, samples[i-1])
 
         sample.midpoints = {}
         table.insert(prevIntercepts, 1, {sample.interceptH, sample.interceptV})
@@ -186,10 +233,13 @@ function main()
       prevTouchV, prevTouchLookY, prevSlopeH, prevSlopeV
         = sample.touchV, sample.touchLookY, sample.slopeH, sample.slopeV
     end
-    
-    for i, sample in ipairz(samples) do
-
-    end
+    --[[
+    print("intercepts", newSample.interceptH, newSample.interceptV)
+    print("midpoints")
+    expand(newSample.midpoints,3)
+    print("crossings")
+    expand(newSample.crossings,3)
+    ]]
   end
 
       --[[
@@ -263,6 +313,18 @@ function main()
     touchDevices[1] = createTouchInput(1,9,10,11,12,13,14,15,16)
     touchDevices[2] = createTouchInput(3,25,26,23,24,25,26,27,28)
     touchDevices[3] = createTouchInput(2,17,18,17,18,19,20,21,22)
+
+    uiState = {
+      {} -- lastDeviceTouched
+      , {} -- lastCornerTouched
+    }
+    uiState.keyStates = 
+      { -- keyStates
+        keyDown = {}
+        , keyUp = {}
+        , keyHeld = {}
+      } 
+
     local testFuncs = {
       calibration_addSample = calibration_addSample --(deviceID, touchX, touchY, touchLookX, touchLookY, touchTick)
       , verticalCalibration = verticalCalibration 
@@ -271,7 +333,7 @@ function main()
   end
 
   --[[ uiState:
-    { lastDeviceTouched, lastCornerTouched}
+    { lastDeviceTouched, lastCornerTouched, keyStates}
   ]]
 
   function onTick()  
@@ -289,6 +351,27 @@ function main()
     if triggerClick then
       lastTriggerClick = {playerLookX, playerLookY}
     end
+    
+    local newKeyDown, newKeyUp, keyHeld = {}, {}, uiState.keyStates.keyHeld
+    newKeyDown.A = I[1]==-1 or nil
+    newKeyDown.D = I[1]==1 or nil
+    newKeyDown.W = I[2]==1 or nil
+    newKeyDown.S = I[2]==-1 or nil
+    for key, holdTicks in pairs (keyHeld) do
+      if newKeyDown[key] then
+        keyHeld[key] = holdTicks + 1
+        newKeyDown[key] = nil
+      else
+        newKeyUp[key] = true
+        keyHeld[key] = nil
+      end
+    end
+    for key, isDown in pairs(newKeyDown) do
+      keyHeld[key] = 1
+    end
+    uiState.keyStates.keyDown = newKeyDown
+    uiState.keyStates.keyUp = newKeyUp
+
     for i, touchDevice in ipairz(touchDevices) do
       local events, state, config, calibration
         = updateTouchInput(touchDevice)
@@ -297,7 +380,7 @@ function main()
         = unpack(calibration)
       
       local touchResult = {}
-      if deviceID==1 and pixWidth and checkTouchStart(touchDevice, 0, pixHeight/2, pixWidth, 2, touchResult) then
+      if deviceID==1 and pixWidth and checkTouchStart(touchDevice, 0, pixHeight/2 - 1, pixWidth, 2, touchResult) then
         local touchX, touchY, touchTick, touchLookX, touchLookY
           = unpack(touchResult, 3)
         calibration_addSample(deviceID, touchX, touchY, playerLookX, playerLookY, touchTick)
@@ -331,6 +414,13 @@ function main()
       end
     end
 
+    if selectedSample and selectedSample.touchV then
+      local fovH = selectedSample.fovHCursor or 5
+      if newKeyDown.A then fovH = fovH - 1 end
+      if newKeyDown.D then fovH = fovH + 1 end
+      selectedSample.fovHCursor = fovH
+    end
+
     for i=1,32 do -- load composite input array and copy to output array for pass-through
       I[i]=getNumber(i);Ib[i]=getBool(i)
       O[i]=I[i];Ob[i]=Ib[i]
@@ -362,7 +452,10 @@ function main()
     function printText(text, color)
       drawText(textPosX, textPosY, text)
       textPosY = textPosY+6
+      --print(text)
     end
+
+    local drawSamples
 
     function onDraw()
       screensRendered = screensRendered + 1
@@ -383,6 +476,27 @@ function main()
       if lastTriggerClick and lastTriggerClick[1] then
         printText( format("%.2f,%.2f", lastTriggerClick[1]*360, lastTriggerClick[2]*360))
       end
+      
+      local message = ("OnDraw() -> drawSamples()")
+      local status, err = pcall(drawSamples)
+      if status then
+        printText("No Errors: Success!")
+      else
+        printText(" *** "..message.." Error ***")
+        if (type(err) == "table") then
+          for key,value in pairs(err) do
+            printText("err."..toString(key)..":")
+            printText(value)
+          end
+        else
+          printText(err)
+        end
+        --if expand then error(err) end
+      end
+
+    end
+
+    function drawSamples()
 
       do
         local touchDevice = touchDevices[screensRendered]
@@ -406,6 +520,30 @@ function main()
 
           local surfaceOffset = pixHeight - 10
 
+          if deviceID == 1 and selectedSample and selectedSample.touchV then
+            local refineH, refineV
+              = pixHeight/2 - 0.5
+              , selectedSample.touchV + 0.5
+
+                    
+            printText(format("touch H/V %i/%i" ,selectedSample.touchH, selectedSample.touchV))
+            printText(format("%.2f,%.2f", selectedSample.touchLookX, selectedSample.touchLookY))
+            printText(format("fovPix: %i", selectedSample.fovHCursor))
+            for k, keyTicks in pairs(uiState.keyStates.keyHeld) do
+              printText(format("key[%s]: %i", k, keyTicks))
+            end
+
+            betterSetAlpha(1)
+            betterDrawRect(refineV-.5,refineH+.5,1,1, cRed)
+            betterDrawRect(refineV+.5,refineH+.5,1,1, cBlue)
+            betterDrawRect(refineV-.5,refineH-.5,1,1, cGreen)
+            betterDrawRect(refineV+.5,refineH-.5,1,1, cMagenta)
+
+            betterSetAlpha(0.5)
+            betterDrawLineRel(refineV-.5,refineH-1.5,0, 0-selectedSample.fovHCursor+2, cWhite)
+            betterDrawLineRel(refineV+.5,refineH-2.5,0, 0-selectedSample.fovHCursor+2, cWhite)
+          end
+
           for i, sample in ipairz(verticalCalibration.samples) do
             --w = 
             local r,g,b
@@ -424,7 +562,7 @@ function main()
                 --, sin(sample.touchLookY * pi * 2)
                 = sample.slopeH * -1
                 , sample.slopeV
-              len = 1 / abs(slopeH) * pixHeight * 0.7
+              len = 1 / abs(slopeH) * pixHeight * 0.6
 
               betterSetAlpha(0.5)
               betterDrawRect(sample.touchV, 3, 1, 1)
@@ -433,7 +571,6 @@ function main()
             end
           end
 
-          betterSetColor(cSolidWhite)
           local sampleCount, nod 
             = #verticalCalibration.samples
           if sampleCount>5 then
@@ -442,17 +579,58 @@ function main()
               local trail = abs(abs(nod - i * min(4, floor(sampleCount / 10))) - sampleCount)
               local sample = verticalCalibration.samples[trail + 1]
               if sample and deviceID > 1 then
+                betterSetColor(cSolidWhite)
                 local slopeH, slopeV, len
                   = sample.slopeH * -1, sample.slopeV
-                len = 1 / abs(slopeH) * pixHeight * 0.8
+                len = 1 / abs(slopeH) * pixHeight * 0.7
                 
                 betterSetAlpha(1- i/5)
                 betterDrawRect(sample.touchV, surfaceOffset + 2, 1, 1)
                 betterDrawLineRel(sample.touchV, surfaceOffset, slopeV * len, slopeH * len)
                 if i==0 and trail>0 then
-                  betterDrawLineRel(sample.interceptV, surfaceOffset - sample.interceptH, slopeH * 50, slopeV * -50)
-                  betterDrawLineRel(sample.interceptV, surfaceOffset - sample.interceptH, slopeH * -50, slopeV * 50)
+                  betterDrawLineRel(sample.interceptV, surfaceOffset - sample.interceptH, slopeH * 30, slopeV * -30)
+                  betterDrawLineRel(sample.interceptV, surfaceOffset - sample.interceptH, slopeH * -30, slopeV * 30)
                 end
+
+                if sample.crossings and sample.crossings.weight 
+                  and sample.crossings.weight>0 then
+
+                  local r,g,b, avgWeight, wLen
+                    = max(0, (pixWidth - sample.touchV) / pixWidth * F * 1.0 - (F*0.35))
+                    , abs(sample.touchH/pixHeight - 0.5) * 2 * (F-32)
+                    , max(0, sample.touchV / pixWidth * F * 1.5 - (F*0.5))
+                    , sample.crossings.weight*#sample.crossings
+
+                  for iC,cross in ipairz(sample.crossings) do
+                    wLen = cross[3]/avgWeight*20
+
+                    betterSetColor(r,g,b,F*min(1,cross[3]/avgWeight * 0.5 * i/5))
+                    if i==0 then
+                      betterDrawLineRel(cross[2], surfaceOffset - cross[1], 0, 0)
+                    end
+
+                    betterSetAlpha(i/5)
+                    betterDrawLineRel(cross[2], surfaceOffset - cross[1]
+                      , slopeH * wLen, slopeV * -wLen)
+                    betterDrawLineRel(cross[2], surfaceOffset - cross[1]
+                      , slopeH * -wLen, slopeV * wLen)
+                  end
+
+                  betterSetColor(r,g,b,1*F)
+                  betterDrawLineRel(sample.crossings.crossV, surfaceOffset -
+                    sample.crossings.crossH, slopeH * 40, slopeV * -40)
+                  betterDrawLineRel(sample.crossings.crossV, surfaceOffset -
+                    sample.crossings.crossH, slopeH * -40, slopeV * 40)
+                  if i==0 then
+                    betterSetColor(cSolidWhite)
+                    betterDrawLineRel(sample.crossings.crossV, surfaceOffset -
+                      sample.crossings.crossH, slopeH * 20, slopeV * -20)
+                    betterDrawLineRel(sample.crossings.crossV, surfaceOffset -
+                      sample.crossings.crossH, slopeH * -20, slopeV * 20)
+                  end
+
+                end
+                
               end
             end
 
@@ -481,6 +659,12 @@ function main()
                   if sample.midpoints and #sample.midpoints>0 then
                     midH, midV = unpack(sample.midpoints[1])
                   end
+                  if sample.crossings and sample.crossings.weight 
+                    and sample.crossings.weight>0 then
+                    midH, midV
+                      = sample.crossings.crossH
+                      , sample.crossings.crossV
+                  end
 
                   local r,g,b
                     = max(0, (pixWidth - sample.touchV) / pixWidth * F * 1.0 - (F*0.35))
@@ -492,9 +676,49 @@ function main()
                 end
               end
             end
+            
+            for i, sample in ipairz(verticalCalibration.samples) do
+              betterSetAlpha(0.5)
+              if deviceID > 1 and i > 1 then
+                local nextSample, slopeH, slopeV
+                  , len, midH, midV
+                  = verticalCalibration.samples[i+1]                  
+                  , sample.slopeH * -1  --= cos(sample.touchLookY * pi * 2) * -1
+                  , sample.slopeV       --, sin(sample.touchLookY * pi * 2)
+                --len = 1 / abs(slopeH) * pixHeight * 0.8
+
+                if nextSample and sample.crossings
+                  and sample.crossings.weight>0
+                  and nextSample.crossings
+                  and nextSample.crossings.weight>0 then
+                  
+                  local r,g,b
+                    = max(0, (pixWidth - sample.touchV) / pixWidth * F * 1.0 - (F*0.35))
+                    , abs(sample.touchH/pixHeight - 0.5) * 2 * (F-32)
+                    , max(0, sample.touchV / pixWidth * F * 1.5 - (F*0.5))
+                  --betterSetColor(r,g,b,F*.75)
+                  betterSetColor(F,F,0,F)
+
+                  betterDrawLine(
+                    sample.crossings.crossV
+                    , surfaceOffset - sample.crossings.crossH
+                    , nextSample.crossings.crossV -- - sample.interceptV
+                    , -- sample.interceptH - 
+                      surfaceOffset - nextSample.crossings.crossH)
+
+                  betterSetColor(r,F*.10,b,F*.5)
+                  betterDrawLineRel(sample.crossings.crossV
+                    , surfaceOffset - sample.crossings.crossH, slopeH * 50, slopeV * -50)
+                  betterDrawLineRel(sample.crossings.crossV
+                    , surfaceOffset - sample.crossings.crossH, slopeH * -50, slopeV * 50)
+                end
+              end
+            end
 
           end
           
+
+
           for i,corner in ipairz(corners) do
             local textWidth, cornerId, cornerX, cornerY, avgLookX, avgLookY, samples
               = 5 * 5 + 2
@@ -849,15 +1073,38 @@ function onTest(inValues, outValues, inBools, outBools, runTest)
   end, "adding 3 refined samples")
 
   runTest(function()    
-    testFuncs.calibration_addSample(1, 5, 80, -0.367 / 360, 60.8817 / 360, 1243)
+    testFuncs.calibration_addSample(1, 5, 80, -0.367 / 360, 60.8817 / 360, 1243)    
+    testFuncs.calibration_addSample(1, 20, 80, -0.6596 / 360, 53.2249 / 360, 1244)
     testFuncs.calibration_addSample(1, 40, 80, -0.6596 / 360, 45.2249 / 360, 1244)
     testFuncs.calibration_addSample(1, 75, 80, -0.6596 / 360, 30.2249 / 360, 1245)
+    testFuncs.calibration_addSample(1, 88, 80, -0.6596 / 360, 23.2249 / 360, 1245)
     testFuncs.calibration_addSample(1, 100, 80, -0.6596 / 360, 15.2249 / 360, 1246)
+    testFuncs.calibration_addSample(1, 115, 80, -0.6596 / 360, 7.2249 / 360, 1246)
     testFuncs.calibration_addSample(1, 130, 80, -0.6596 / 360, -2.2249 / 360, 1247)
   end, "adding samples between")
 
   --print("verticalCalibration:")
   --expand(testFuncs.verticalCalibration,5)
+
+  -- WASD check
+  
+  inValues[1] = 0
+  inValues[2] = 0
+  runTest(function() onTick() end, "onTick no Keys")
+  inValues[1] = -1
+  inValues[2] = -1
+  runTest(function() onTick() end, "onTick Keys:A+S")
+  inValues[1] = -1
+  inValues[2] = 0
+  runTest(function() onTick() end, "onTick Keys:A held, s released")
+  inValues[1] = 1
+  inValues[2] = 1
+  runTest(function() onTick() end, "onTick Keys:W+D")
+  runTest(function() onDraw() end, "onDraw 1")
+  inValues[1] = 0
+  inValues[2] = 0
+  runTest(function() onTick() end, "onTick NoKeys")
+  runTest(function() onDraw() end, "onDraw 1")
 
   
   runTest(function() onTick() end, "onTick before 3 draws")
