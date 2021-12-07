@@ -58,6 +58,15 @@ function main()
         , touchTick = -1
       }
     }
+    , refinedSamples = {
+      definition = {
+        touchH = 0
+        , touchV = 0
+        , touchLookX = 0
+        , touchLookY = 0
+        , fovH = 0
+      }
+    }
   }
 
   local function averageTables(...)
@@ -103,6 +112,21 @@ function main()
   end
 
   local selectedSample = {}
+
+  -- calibration_refineSample(selectedSample, lastTriggerClick)
+  local function calibration_refineSample(sample, lookXY)
+    local rLookX, rLookY = unpack(lookXY)
+    sample.fovH = sample.fovHCursor 
+    sample.refined = {
+      touchH = sample.touchH - 0.5
+      , touchV = sample.touchV + 0.5
+      , touchLookX = rLookX
+      , touchLookY = rLookY
+      , fovH = sample.fovH
+    }
+    verticalCalibration.refinedSamples[sample.touchV] = sample.refined
+
+  end
 
   local function calibration_addSample(deviceID, touchX, touchY, touchLookX, touchLookY, touchTick)    
     local samples, sampleIndex, newSample
@@ -419,6 +443,9 @@ function main()
       if newKeyDown.A then fovH = fovH - 1 end
       if newKeyDown.D then fovH = fovH + 1 end
       selectedSample.fovHCursor = fovH
+      if triggerClick then
+        calibration_refineSample(selectedSample, lastTriggerClick)
+      end
     end
 
     for i=1,32 do -- load composite input array and copy to output array for pass-through
@@ -521,18 +548,24 @@ function main()
           local surfaceOffset = pixHeight - 10
 
           if deviceID == 1 and selectedSample and selectedSample.touchV then
-            local refineH, refineV
-              = pixHeight/2 - 0.5
-              , selectedSample.touchV + 0.5
-
-                    
+            -- print selected sample debug info                    
             printText(format("touch H/V %i/%i" ,selectedSample.touchH, selectedSample.touchV))
-            printText(format("%.2f,%.2f", selectedSample.touchLookX, selectedSample.touchLookY))
+            printText(format("%.2f,%.2f", selectedSample.touchLookX * 360, selectedSample.touchLookY * 360))
             printText(format("fovPix: %i", selectedSample.fovHCursor))
+
+            if selectedSample.refined then
+              printText(format("Rtouch H/V %.1f/%.1f" ,selectedSample.refined.touchH, selectedSample.refined.touchV))
+              printText(format("%.4f, %.4f", selectedSample.refined.touchLookX * 360, selectedSample.refined.touchLookY * 360))
+              printText(format("fovPix: %i", selectedSample.refined.fovH))
+            end
+
             for k, keyTicks in pairs(uiState.keyStates.keyHeld) do
               printText(format("key[%s]: %i", k, keyTicks))
             end
 
+            local refineH, refineV
+              = pixHeight/2 - 0.5
+              , selectedSample.touchV + 0.5
             betterSetAlpha(1)
             betterDrawRect(refineV-.5,refineH+.5,1,1, cRed)
             betterDrawRect(refineV+.5,refineH+.5,1,1, cBlue)
@@ -570,7 +603,38 @@ function main()
               betterDrawLineRel(sample.touchV, surfaceOffset, slopeV * len, slopeH * len)
             end
           end
+          
+          local firstDeviceCalibration =
+            (touchDevices[1] or {})[4] or {}
+          local sampleRange = firstDeviceCalibration[2] or 0
 
+          -- draw refined samples
+          for i=0,sampleRange - 1 do
+            local aliasV = i
+            local refined = verticalCalibration.refinedSamples[i]
+            
+            if refined then
+              local r,g,b
+                = max(0, (pixWidth - refined.touchV) / pixWidth * F * 1.0 - (F*0.35))
+                , abs(refined.touchH/pixHeight - 0.5) * 2 * (F-32)
+                , max(0, refined.touchV / pixWidth * F * 1.5 - (F*0.5))
+
+              betterSetColor(r,g,b,255)
+              if deviceID == 1 then
+                betterDrawLineRel(aliasV, pixHeight / 2 - 3, 0, 3 - refined.fovH)
+              elseif deviceID > 1 then
+                local slopeH = cos(refined.touchLookY * pi * 2) * -1
+                local slopeV = sin(refined.touchLookY * pi * 2)
+                local len
+                len = 1 / abs(slopeH) * pixHeight * 0.6
+
+                betterSetAlpha(0.5)
+                betterDrawRect(aliasV, surfaceOffset -48, 1, 1)
+                betterDrawLineRel(aliasV, surfaceOffset - 50, slopeV * len, slopeH * len)
+              end
+            end
+          end
+          
           local sampleCount, nod 
             = #verticalCalibration.samples
           if sampleCount>5 then
