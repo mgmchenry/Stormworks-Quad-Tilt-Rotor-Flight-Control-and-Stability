@@ -1,0 +1,104 @@
+return {
+-- Table: {1}
+{
+   {2},
+   {3},
+   {4},
+   [48]={5},
+   ["definition"]={6},
+   [66]={7},
+   [98]={8},
+   [84]={9},
+   [13]={10},
+   [49]={11},
+   [0]={12},
+},
+-- Table: {2}
+{
+   ["touchH"]=79.5,
+   ["touchV"]=1.5,
+   ["fovH"]=53,
+   ["touchLookY"]=0.18291075527668,
+   ["touchLookX"]=-2.5296687454102e-05,
+},
+-- Table: {3}
+{
+   ["touchH"]=79.5,
+   ["touchV"]=2.5,
+   ["fovH"]=53,
+   ["touchLookY"]=0.18244123458862,
+   ["touchLookX"]=2.4438520995318e-05,
+},
+-- Table: {4}
+{
+   ["touchH"]=79.5,
+   ["touchV"]=3.5,
+   ["fovH"]=53,
+   ["touchLookY"]=0.18197172880173,
+   ["touchLookX"]=-4.3045810116382e-07,
+},
+-- Table: {5}
+{
+   ["touchH"]=79.5,
+   ["touchV"]=48.5,
+   ["fovH"]=37,
+   ["touchLookY"]=0.15136148035526,
+   ["touchLookX"]=2.4442015273962e-05,
+},
+-- Table: {6}
+{
+   ["touchH"]=0,
+   ["touchV"]=0,
+   ["fovH"]=0,
+   ["touchLookY"]=0,
+   ["touchLookX"]=0,
+},
+-- Table: {7}
+{
+   ["touchH"]=79.5,
+   ["touchV"]=66.5,
+   ["fovH"]=32,
+   ["touchLookY"]=0.13145539164543,
+   ["touchLookX"]=-7.5028292485513e-05,
+},
+-- Table: {8}
+{
+   ["touchH"]=79.5,
+   ["touchV"]=98.5,
+   ["fovH"]=23,
+   ["touchLookY"]=0.087136201560497,
+   ["touchLookX"]=2.4440227207378e-05,
+},
+-- Table: {9}
+{
+   ["touchH"]=79.5,
+   ["touchV"]=84.5,
+   ["fovH"]=27,
+   ["touchLookY"]=0.10849770158529,
+   ["touchLookX"]=-4.2225480001434e-07,
+},
+-- Table: {10}
+{
+   ["touchH"]=79.5,
+   ["touchV"]=13.5,
+   ["fovH"]=49,
+   ["touchLookY"]=0.17680740356445,
+   ["touchLookX"]=-7.5030606240034e-05,
+},
+-- Table: {11}
+{
+   ["touchH"]=79.5,
+   ["touchV"]=49.5,
+   ["fovH"]=37,
+   ["touchLookY"]=0.15042251348495,
+   ["touchLookX"]=2.4442029825877e-05,
+},
+-- Table: {12}
+{
+   ["touchH"]=79.5,
+   ["touchV"]=0.5,
+   ["fovH"]=54,
+   ["touchLookY"]=0.18723000586033,
+   ["touchLookX"]=-4.2540457911855e-07,
+},
+}

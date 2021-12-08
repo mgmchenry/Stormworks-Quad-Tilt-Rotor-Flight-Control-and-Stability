@@ -332,11 +332,72 @@ function main()
     
   local createTouchInput, updateTouchInput, checkTouchStart
 
+  local function addTouchButton(touchDevice, name, rect, events)
+    local buttonInfo = touchDevice.buttons[name] or {}
+    buttonInfo.name = name
+    buttonInfo.rect = rect
+    buttonInfo.events = events
+
+    touchDevice.buttons[name] = buttonInfo
+  end
+
+  local function checkTouchButtonEvents(touchDevice)
+    local events, state, config, calibration = unpack(touchDevice)
+
+    for bName, bInfo in pairs(touchDevice.buttons) do
+      local result, left, top, width, height
+        = {}, unpack(bInfo.rect)
+
+      for i, coord in ipairz({events[1], events[2]}) do    
+        local touchIsPressed, touchWasPressed, touchX, touchY
+          , touchTick, touchLookX, touchLookY
+          , lastPressEvent
+          , lastReleaseEvent
+          = unpack(coord)
+
+        local isInRect -- if this event is inside the hitbox
+          = touchX>=left-0.5 and touchX<left+width-0.5
+          and touchY>=top-0.5 and touchY<top+height-0.5
+
+        if isInRect and touchIsPressed and not touchWasPressed then
+          -- this is new press this tick
+          -- create a full copy of lastPressEvent
+          result = plop(false, {}, coord[8])
+          bInfo.isPressed = true
+          bInfo.lastPressEvent = result
+          bInfo.pressHandled = type(bInfo.events.onPress)=="function"
+            and bInfo.events.onPress(bInfo,result)
+        elseif isInRect and touchWasPressed and not touchIsPressed then
+          -- this is released this tick
+          -- create a full copy of lastReleaseEvent
+          result = plop(false, {}, coord[9])
+          bInfo.isPressed = false
+          bInfo.lastReleaseEvent = result
+          bInfo.releaseHandled = type(bInfo.events.onRelease)=="function"
+            and bInfo.events.onRelease(bInfo,result)
+        end
+      end
+    end
+  end
+
+  local saveButtonEvents = {
+    onPress = function(button, pressEvent)
+      table.save(verticalCalibration.refinedSamples, "pixelLookAngleRefined.txt")
+      table.save(verticalCalibration.samples, "pixelLookAngle.txt")
+      return true
+    end,
+    onR = function(button, releaseEvent)
+      return true
+    end
+  }
+
   local function init()
     -- input channels(touch1On, touch2On, width, height, touch1X, touch1Y, touch2X, touch2Y,deviceID)
     touchDevices[1] = createTouchInput(1,9,10,11,12,13,14,15,16)
-    touchDevices[2] = createTouchInput(3,25,26,23,24,25,26,27,28)
-    touchDevices[3] = createTouchInput(2,17,18,17,18,19,20,21,22)
+    touchDevices[2] = createTouchInput(2,17,18,17,18,19,20,21,22)
+    touchDevices[3] = createTouchInput(3,25,26,23,24,25,26,27,28)
+
+    addTouchButton(touchDevices[3], "Save", {288/2 + 10, 10, 30, 30}, saveButtonEvents )
 
     uiState = {
       {} -- lastDeviceTouched
@@ -402,6 +463,8 @@ function main()
       
       local deviceID, pixWidth, pixHeight, meterWidth, meterHeight, corners 
         = unpack(calibration)
+
+      checkTouchButtonEvents(touchDevice)
       
       local touchResult = {}
       if deviceID==1 and pixWidth and checkTouchStart(touchDevice, 0, pixHeight/2 - 1, pixWidth, 2, touchResult) then
@@ -410,7 +473,13 @@ function main()
         calibration_addSample(deviceID, touchX, touchY, playerLookX, playerLookY, touchTick)
         -- touchLookX, touchLookY, touchTick)
 
-      end        
+      end
+
+      if deviceID==3 and pixWidth then
+        if checkTouchStart(touchDevice, 0, 0, pixWidth, pixHeight, touchResult) then
+          touchDevice.boop1 = true
+        end
+      end
       
       for j, corner in ipairz(corners or {}) do
         local cornerId, cornerX, cornerY, avgLookX, avgLookY, samples
@@ -521,6 +590,42 @@ function main()
         --if expand then error(err) end
       end
 
+    end
+
+    local function drawButtons()
+      -- todo: this is redundant. sort it out
+      local touchDevice = touchDevices[screensRendered]
+      local events, states, inputConfig, calibration = unpack(touchDevice or {})
+      local deviceID, pixWidth, pixHeight, meterWidth, meterHeight, corners
+      = unpack(calibration or {})    
+
+      if deviceID==3 then
+        if touchDevice.boop1 then printText("boop1") end
+        local saveButton = touchDevice.buttons.Save
+        if saveButton then
+          local eventCount = type(saveButton.events)=="table" and #saveButton.events or 0
+
+          printText("saveButton events: " .. eventCount)
+          printText(
+            (saveButton.isPressed and "isPressed " or "")
+            ..(saveButton.pressHandled and "pressHandled " or "")
+            ..(saveButton.releaseHandled and "releaseHandled " or "")
+            )
+        end
+      end
+      
+      for bName, bInfo in pairs(touchDevice.buttons) do
+        local result, left, top, width, height
+          = {}, unpack(bInfo.rect)        
+        
+        betterSetColor(cSolidWhite)
+        betterDrawRect(left,top,width,height)
+        if bInfo.isPressed then
+          betterDrawRect(left+1,top+1,width-2,height-2, {F,F,F,F*.5}, true)
+          betterSetColor(cBlue)
+        end        
+        drawTextBox(left+2, top+2, width-4, height-4, bInfo.name)
+      end
     end
 
     function drawSamples()
@@ -826,6 +931,8 @@ function main()
         end
       end
 
+      drawButtons()
+
     end
     --[[ End onDraw]]
 
@@ -899,6 +1006,7 @@ function main()
       -- calibration
       , {deviceID}
     }
+    newDevice.buttons = {}
     return newDevice
   end
 
@@ -920,6 +1028,29 @@ function main()
         if touchX>=left-0.5 and touchX<left+width-0.5
           and touchY>=top-0.5 and touchY<top+height-0.5 then
           -- this event is inside the hitbox. Return full copy of lastPressEvent
+          return plop(false, result, coord[8])
+
+        end
+      end
+    end
+  end
+
+  function checkTouchEnd(touchDevice, left, top, width, height, result)
+    local events, state, config, calibration = unpack(touchDevice)
+
+    --[[ touchEvent format
+      {touchIsPressed, touchWasPressed, touchX, touchY, touchTick, touchLookX, touchLookY,
+          , lastPressEvent{} 
+          , lastReleaseEvent{} }
+    ]]
+    for i, coord in ipairz({events[1], events[2]}) do    
+      local touchIsPressed, touchWasPressed, touchX, touchY = unpack(coord)
+      if touchWasPressed and not touchIsPressed then
+        -- this is new press this tick
+        if touchX>=left-0.5 and touchX<left+width-0.5
+          and touchY>=top-0.5 and touchY<top+height-0.5 then
+          -- this event is inside the hitbox. Return full copy of lastPressEvent
+          -- todo: maybe should be lastReleaseEvent instead
           return plop(false, result, coord[8])
 
         end
@@ -1088,8 +1219,185 @@ function --[[getTableValues]](container, valueList, local_returnVals, local_star
 	return unpack(local_returnVals)
 end
 
+-- borrowed table save/load to disk
+--[[
+   Save Table to File
+   Load Table from File
+   v 1.0
+   
+   Lua 5.2 compatible
+   
+   Only Saves Tables, Numbers and Strings
+   Insides Table References are saved
+   Does not save Userdata, Metatables, Functions and indices of these
+   ----------------------------------------------------
+   table.save( table , filename )
+   
+   on failure: returns an error msg
+   
+   ----------------------------------------------------
+   table.load( filename or stringtable )
+   
+   Loads a table that has been saved via the table.save function
+   
+   on success: returns a previously saved table
+   on failure: returns as second argument an error msg
+   ----------------------------------------------------
+   
+   Licensed under the same terms as Lua itself.
+]]--
+do
+   -- declare local variables
+   --// exportstring( string )
+   --// returns a "Lua" portable version of the string
+   local function exportstring( s )
+      return string.format("%q", s)
+   end
+
+   --// The Save Function
+   function table.save(  tbl,filename )
+      local charS,charE = "   ","\n"
+      local file,err = io.open( filename, "wb" )
+      if err then return err end
+
+      -- initiate variables for save procedure
+      local tables,lookup = { tbl },{ [tbl] = 1 }
+      file:write( "return {"..charE )
+
+      for idx,t in ipairs( tables ) do
+         file:write( "-- Table: {"..idx.."}"..charE )
+         file:write( "{"..charE )
+         local thandled = {}
+
+         for i,v in ipairs( t ) do
+            thandled[i] = true
+            local stype = type( v )
+            -- only handle value
+            if stype == "table" then
+               if not lookup[v] then
+                  table.insert( tables, v )
+                  lookup[v] = #tables
+               end
+               file:write( charS.."{"..lookup[v].."},"..charE )
+            elseif stype == "string" then
+               file:write(  charS..exportstring( v )..","..charE )
+            elseif stype == "number" then
+               file:write(  charS..tostring( v )..","..charE )
+            end
+         end
+
+         for i,v in pairs( t ) do
+            -- escape handled values
+            if (not thandled[i]) then
+            
+               local str = ""
+               local stype = type( i )
+               -- handle index
+               if stype == "table" then
+                  if not lookup[i] then
+                     table.insert( tables,i )
+                     lookup[i] = #tables
+                  end
+                  str = charS.."[{"..lookup[i].."}]="
+               elseif stype == "string" then
+                  str = charS.."["..exportstring( i ).."]="
+               elseif stype == "number" then
+                  str = charS.."["..tostring( i ).."]="
+               end
+            
+               if str ~= "" then
+                  stype = type( v )
+                  -- handle value
+                  if stype == "table" then
+                     if not lookup[v] then
+                        table.insert( tables,v )
+                        lookup[v] = #tables
+                     end
+                     file:write( str.."{"..lookup[v].."},"..charE )
+                  elseif stype == "string" then
+                     file:write( str..exportstring( v )..","..charE )
+                  elseif stype == "number" then
+                     file:write( str..tostring( v )..","..charE )
+                  end
+               end
+            end
+         end
+         file:write( "},"..charE )
+      end
+      file:write( "}" )
+      file:close()
+   end
+   
+   --// The Load Function
+   function table.load( sfile )
+      local ftables,err = loadfile( sfile )
+      if err then return _,err end
+      local tables = ftables()
+      print(sfile .. " table count: " .. #tables)
+      print(tables)
+      for idx = 1,#tables do
+         local tolinki = {}
+         print("idx: ", idx, tables[idx])
+         for i,v in pairs( tables[idx] ) do
+            if type( v ) == "table" then
+               tables[idx][i] = tables[v[1]]
+            end
+            if type( i ) == "table" and tables[i[1]] then
+               table.insert( tolinki,{ i,tables[i[1]] } )
+            end
+         end
+         -- link indices
+         for _,v in ipairs( tolinki ) do
+            tables[idx][v[2]],tables[idx][v[1]] =  tables[idx][v[1]],nil
+         end
+      end
+      return tables[1]
+   end
+-- close do
+end
+
+-- ChillCode
+
 local testFuncs = main()()
 
+local function saveTabFiles()
+  local charS,charE,charT = "   ","\r\n","\t"
+  local inFile = "ArchivedCopies/pixelLookAngleRefined.txt"
+  print("Loading [" .. inFile .. "]")
+  local refinedSamples = table.load(inFile)
+  print("type(refinedSamples): " .. type(refinedSamples))
+
+  local outFile = "ArchivedCopies/pixelLookAngleRefined.tab.txt"
+  print("Opening [" .. outFile .. "] for write")
+  local file,err = io.open( outFile, "wb" )
+  if err then
+    print(err)
+    return err 
+  end
+
+  local columnFormat = {"touchV", "touchLookY", "fovH"}
+  for fI,field in ipairs(columnFormat) do
+    file:write(
+      tostring(field) .. 
+      (fI==#columnFormat and charE or charT)
+      )
+  end
+
+  for i=0,288 do
+    local refined = refinedSamples[i]
+    if type(refined)=="table" then
+      print("found sample at index " .. i .. ":", refined)
+      for fI,field in ipairs(columnFormat) do
+        file:write(
+          tostring(refined[field]) .. 
+          (fI==#columnFormat and charE or charT)
+          )
+      end
+    end
+  end
+  file:write( charE )
+  file:close()
+end
 
 note={"Unit tests start here"}
 function onTest(inValues, outValues, inBools, outBools, runTest)
@@ -1100,12 +1408,13 @@ function onTest(inValues, outValues, inBools, outBools, runTest)
     outBools[i]=false
   end
 
-  onTick()
-  onDraw()
-
   runTest(function() onTick() end, "onTick")
   runTest(function() onDraw() end, "onDraw")
 
+  saveTabFiles()
+end
+
+local function actualTests(inValues, outValues, inBools, outBools, runTest)
   inBools[9] = true
   inValues[11] = 96
   inValues[12] = 96
@@ -1175,4 +1484,20 @@ function onTest(inValues, outValues, inBools, outBools, runTest)
   runTest(function() onDraw() end, "onDraw 1")
   runTest(function() onDraw() end, "onDraw 2")
   runTest(function() onDraw() end, "onDraw 3")
+
+  -- test press save button
+  inValues[25] = 288/2 + 10 + 1
+  inValues[26] = 11
+  inBools[25] = true
+  runTest(function() onTick() end, "onTick (press save button)")
+  runTest(function() onDraw() end, "onDraw 1")
+  runTest(function() onDraw() end, "onDraw 2")
+  runTest(function() onDraw() end, "onDraw 3")
+
+  inBools[25] = false
+  runTest(function() onTick() end, "onTick (release save button)")
+  runTest(function() onDraw() end, "onDraw 1")
+  runTest(function() onDraw() end, "onDraw 2")
+  runTest(function() onDraw() end, "onDraw 3")
+
 end
