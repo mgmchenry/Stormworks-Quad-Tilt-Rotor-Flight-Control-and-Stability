@@ -162,28 +162,29 @@ output = {
   setNumber=f("setNumber", function(channel, value) outValues[channel]=value end, true),
   setBool=f("setBool", function(channel, value) outBools[channel]=value end, true)
 }
+local drawIsQuiet = true
 screen = {
-  drawTextBox=f("drawTextBox"),
-  drawText=f("drawText"),
-  setColor=f("setColor"),
-  getWidth=f("getWidth", function() return 96 end),
-  getHeight=f("getHeight", function() return 96 end),
-  drawLine=f("drawLine"),
-  setColor=f("setColor", nil, true),
+  drawTextBox=f("drawTextBox", nil, drawIsQuiet),
+  drawText=f("drawText", nil, drawIsQuiet),
+  setColor=f("setColor", nil, drawIsQuiet),
+  getWidth=f("getWidth", function() return 96 end, drawIsQuiet),
+  getHeight=f("getHeight", function() return 96 end, drawIsQuiet),
+  drawLine=f("drawLine", nil, drawIsQuiet),
+  setColor=f("setColor", nil, drawIsQuiet),
   drawClear=f("drawClear"),
-  drawTriangleF=f("drawTriangleF"),
-  drawTriangle=f("drawTriangle")
-  , drawRectF=f("drawRectF")
-  , drawRect=f("drawRectF")
-  , drawCircle=f("drawCircle") --x, y, radius
-  , drawCircleF=f("drawCircleF") --x, y, radius
+  drawTriangleF=f("drawTriangleF", nil, drawIsQuiet),
+  drawTriangle=f("drawTriangle", nil, drawIsQuiet)
+  , drawRectF=f("drawRectF", nil, drawIsQuiet)
+  , drawRect=f("drawRectF", nil, drawIsQuiet)
+  , drawCircle=f("drawCircle", nil, drawIsQuiet) --x, y, radius
+  , drawCircleF=f("drawCircleF", nil, drawIsQuiet) --x, y, radius
 
-  , setMapColorOcean=f("setMapColorOcean")
-	, setMapColorShallows=f("setMapColorShallows")
-	, setMapColorLand=f("setMapColorLand")
-	, setMapColorGrass=f("setMapColorGrass")
-	, setMapColorSand=f("setMapColorSand")
-	, setMapColorSnow=f("setMapColorSnow")
+  , setMapColorOcean=f("setMapColorOcean", nil, drawIsQuiet)
+	, setMapColorShallows=f("setMapColorShallows", nil, drawIsQuiet)
+	, setMapColorLand=f("setMapColorLand", nil, drawIsQuiet)
+	, setMapColorGrass=f("setMapColorGrass", nil, drawIsQuiet)
+	, setMapColorSand=f("setMapColorSand", nil, drawIsQuiet)
+	, setMapColorSnow=f("setMapColorSnow", nil, drawIsQuiet)
   , drawMap=f("drawMap")
 }
 propValues = {}

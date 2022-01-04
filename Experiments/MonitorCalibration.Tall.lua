@@ -36,6 +36,8 @@ function main()
     , 0 -- tickCounter
     , 0, 0, {}, true, {}
     , {}
+  
+  local lastFovHCursor = 5
 
   local verticalCalibration = {
     seatPosition = {0,0,0}
@@ -141,6 +143,7 @@ function main()
         , slopeH = cos(touchLookY * pi * 2) -- was relX
         , slopeV = sin(touchLookY * pi * 2) -- was relY
         , ssCount = 1
+        , fovHCursor = lastFovHCursor
       }
       
     --print("sample count: " .. #samples)
@@ -161,7 +164,8 @@ function main()
         end
         newSample.touchLookY = newSample.touchLookY / (#subSamples + 1)
         newSample.ssCount = #subSamples
-        newSample.fovHCursor = foundSample.fovHCursor or foundSample.fovH or 5
+        newSample.fovHCursor 
+          = foundSample.fovHCursor or foundSample.fovH
         newSample.fovH = foundSample.fovH
         break      
       elseif foundSample.touchV > newSample.touchV then
@@ -181,7 +185,9 @@ function main()
       sampleIndex = 1
       samples[sampleIndex]=newSample
     end
-    selectedSample = newSample
+    selectedSample = newSample    
+    lastFovHCursor = selectedSample.fovHCursor
+
     --print("sample count: " .. #samples)
     
     -- this table should not need sorting any more. will see if I messed it up?
@@ -382,8 +388,53 @@ function main()
 
   local saveButtonEvents = {
     onPress = function(button, pressEvent)
-      table.save(verticalCalibration.refinedSamples, "pixelLookAngleRefined.txt")
-      table.save(verticalCalibration.samples, "pixelLookAngle.txt")
+      local savePath = os.getenv("APPDATA")
+      savePath = 
+        (savePath or ".") .. "/Stormworks/ArkLua/data/"
+      --print("savePath", savePath)
+
+      local result = table.save(verticalCalibration.refinedSamples, savePath .. "pixelLookAngleRefined.txt")
+      --print(result)
+      local result = table.save(verticalCalibration.samples, savePath .. "pixelLookAngle.txt")
+      --print(result)
+      return true
+    end,
+    onR = function(button, releaseEvent)
+      return true
+    end
+  }
+
+  local loadButtonEvents = {
+    onPress = function(button, pressEvent)
+      local savePath = os.getenv("APPDATA")
+      savePath = 
+        (savePath or ".") .. "/Stormworks/ArkLua/data/"
+      --print("savePath", savePath)
+      --print("loading file", savePath)
+
+      local loadTable = table.load(savePath .. "pixelLookAngle.20211208m.txt")
+      --print("loadedTable", unpack(loadTable))
+      --print(result)
+
+      local importedSamples = loadTable
+      for i, sample in ipairs(importedSamples) do
+        --local function calibration_addSample(deviceID, touchX, touchY, touchLookX, touchLookY, touchTick)
+        local device, touchH, touchV, touchLookX, touchLookY, touchTick
+          = 1, sample.touchH, sample.touchV, sample.touchLookX, sample.touchLookY, -1000
+        
+        lastFovHCursor = sample.fovH or sample.fovHCursor or nil
+        calibration_addSample(device, touchV, touchH, touchLookX, touchLookY, touchTick)
+        selectedSample.fovH = sample.fovH
+        selectedSample.fovHCursor = sample.fovHCursor
+
+        if type(sample.refined)=="table" then
+          local refined = sample.refined
+          calibration_refineSample(selectedSample, {refined.touchLookX, refined.touchLookY})
+          local lookupRefined = verticalCalibration.refinedSamples[sample.touchV]
+        end
+
+      end
+
       return true
     end,
     onR = function(button, releaseEvent)
@@ -398,6 +449,7 @@ function main()
     touchDevices[3] = createTouchInput(3,25,26,23,24,25,26,27,28)
 
     addTouchButton(touchDevices[3], "Save", {288/2 + 10, 10, 30, 30}, saveButtonEvents )
+    addTouchButton(touchDevices[3], "Load", {288/2 + 10, 40, 30, 30}, loadButtonEvents )
 
     uiState = {
       {} -- lastDeviceTouched
@@ -472,7 +524,6 @@ function main()
           = unpack(touchResult, 3)
         calibration_addSample(deviceID, touchX, touchY, playerLookX, playerLookY, touchTick)
         -- touchLookX, touchLookY, touchTick)
-
       end
 
       if deviceID==3 and pixWidth then
@@ -508,10 +559,11 @@ function main()
     end
 
     if selectedSample and selectedSample.touchV then
-      local fovH = selectedSample.fovHCursor or 5
+      local fovH = selectedSample.fovHCursor or lastFovHCursor
       if newKeyDown.A then fovH = fovH - 1 end
       if newKeyDown.D then fovH = fovH + 1 end
       selectedSample.fovHCursor = fovH
+      lastFovHCursor = selectedSample.fovHCursor
       if triggerClick then
         calibration_refineSample(selectedSample, lastTriggerClick)
       end
@@ -605,12 +657,6 @@ function main()
         if saveButton then
           local eventCount = type(saveButton.events)=="table" and #saveButton.events or 0
 
-          printText("saveButton events: " .. eventCount)
-          printText(
-            (saveButton.isPressed and "isPressed " or "")
-            ..(saveButton.pressHandled and "pressHandled " or "")
-            ..(saveButton.releaseHandled and "releaseHandled " or "")
-            )
         end
       end
       
@@ -1035,14 +1081,15 @@ function main()
     end
   end
 
+  --[[
   function checkTouchEnd(touchDevice, left, top, width, height, result)
     local events, state, config, calibration = unpack(touchDevice)
 
-    --[[ touchEvent format
+    --[ [ touchEvent format
       {touchIsPressed, touchWasPressed, touchX, touchY, touchTick, touchLookX, touchLookY,
           , lastPressEvent{} 
           , lastReleaseEvent{} }
-    ]]
+    ] ]
     for i, coord in ipairz({events[1], events[2]}) do    
       local touchIsPressed, touchWasPressed, touchX, touchY = unpack(coord)
       if touchWasPressed and not touchIsPressed then
@@ -1057,6 +1104,7 @@ function main()
       end
     end
   end
+  --]]
 
   function updateTouchInput(touchDevice)
     local events, state, config, calibration = unpack(touchDevice)
@@ -1326,6 +1374,8 @@ do
       end
       file:write( "}" )
       file:close()
+
+      return "Wrote " .. #tables .. " tables to [" .. filename .. "]"
    end
    
    --// The Load Function
@@ -1333,11 +1383,8 @@ do
       local ftables,err = loadfile( sfile )
       if err then return _,err end
       local tables = ftables()
-      print(sfile .. " table count: " .. #tables)
-      print(tables)
       for idx = 1,#tables do
          local tolinki = {}
-         print("idx: ", idx, tables[idx])
          for i,v in pairs( tables[idx] ) do
             if type( v ) == "table" then
                tables[idx][i] = tables[v[1]]
@@ -1362,12 +1409,12 @@ local testFuncs = main()()
 
 local function saveTabFiles()
   local charS,charE,charT = "   ","\r\n","\t"
-  local inFile = "ArchivedCopies/pixelLookAngleRefined.txt"
+  local inFile = "./Stormworks/ArkLua/data/pixelLookAngleRefined.20211208f.txt"
   print("Loading [" .. inFile .. "]")
-  local refinedSamples = table.load(inFile)
-  print("type(refinedSamples): " .. type(refinedSamples))
+  local refinedSamples, err = table.load(inFile)
+  print("type(refinedSamples): " .. type(refinedSamples), refinedSamples, err)
 
-  local outFile = "ArchivedCopies/pixelLookAngleRefined.tab.txt"
+  local outFile = "./Stormworks/ArkLua/data/pixelLookAngleRefined.tab.txt"
   print("Opening [" .. outFile .. "] for write")
   local file,err = io.open( outFile, "wb" )
   if err then
@@ -1411,10 +1458,12 @@ function onTest(inValues, outValues, inBools, outBools, runTest)
   runTest(function() onTick() end, "onTick")
   runTest(function() onDraw() end, "onDraw")
 
+--[[
+--]]
   saveTabFiles()
 end
-
 local function actualTests(inValues, outValues, inBools, outBools, runTest)
+
   inBools[9] = true
   inValues[11] = 96
   inValues[12] = 96
@@ -1490,6 +1539,36 @@ local function actualTests(inValues, outValues, inBools, outBools, runTest)
   inValues[26] = 11
   inBools[25] = true
   runTest(function() onTick() end, "onTick (press save button)")
+  runTest(function() onDraw() end, "onDraw 1")
+  runTest(function() onDraw() end, "onDraw 2")
+  runTest(function() onDraw() end, "onDraw 3")
+
+  inBools[25] = false
+  runTest(function() onTick() end, "onTick (release save button)")
+  runTest(function() onDraw() end, "onDraw 1")
+  runTest(function() onDraw() end, "onDraw 2")
+  runTest(function() onDraw() end, "onDraw 3")
+  
+  -- test press save button
+  inValues[25] = 288/2 + 10 + 1
+  inValues[26] = 41
+  inBools[25] = true
+  runTest(function() onTick() end, "onTick (press load button)")
+  runTest(function() onDraw() end, "onDraw 1")
+  runTest(function() onDraw() end, "onDraw 2")
+  runTest(function() onDraw() end, "onDraw 3")
+
+  inBools[25] = false
+  runTest(function() onTick() end, "onTick (release load button)")
+  runTest(function() onDraw() end, "onDraw 1")
+  runTest(function() onDraw() end, "onDraw 2")
+  runTest(function() onDraw() end, "onDraw 3")
+
+    -- test press save button
+  inValues[25] = 288/2 + 10 + 1
+  inValues[26] = 11
+  inBools[25] = true
+  runTest(function() onTick() end, "onTick (press save button with loaded data)")
   runTest(function() onDraw() end, "onDraw 1")
   runTest(function() onDraw() end, "onDraw 2")
   runTest(function() onDraw() end, "onDraw 3")
