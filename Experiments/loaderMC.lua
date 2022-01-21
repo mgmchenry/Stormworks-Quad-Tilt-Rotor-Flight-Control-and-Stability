@@ -13,7 +13,8 @@ if type(dofile)=="function" then
   do
     local loader, program
       = "Experiments/luaMCLoader.lua"
-      , "Experiments/MonitorCalibration.Tall.lua"
+      --, "Experiments/MonitorCalibration.Tall.lua"
+      , "ArkNet/ArkNetHostAircraftControl.lua"
     print("executing loader: " .. loader)
     dofile(loader)
     print("running program: " .. program)

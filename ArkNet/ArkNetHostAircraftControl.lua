@@ -1,6 +1,6 @@
--- Stormworks ArkNet Host Dual Station Full
+-- Stormworks ArkNet Host Aircraft Control
 -- V 01.01 b0 Michael McHenry 2022-10-07
-source={"ArkNetHDU00x01c","repl.it/@mgmchenry"}
+source={"ArkNetSasHostx01c","repl.it/@mgmchenry"}
 
 --[[
 ArkNet Theory:
@@ -18,63 +18,78 @@ ArkNet Host Control:
   bool_32: Disable Host Video Out (reverts to fallback)
 
 
-ArkNet Host MC Inputs and Outputs
-  Col1:
-    ArkNet DataLoop P1 In
-    ArkNet DataLoop Root Out
     XPDR Freq Out
     XPDR Radio In
-    XPDR Radio Out
     XPDR Radio Xmit
-  Col2:
-    GPS X
-    GPS Y
-    Alt
-    Compass
-    Forward Speed
-    Tilt Forwad
-  Col3:
-    Tilt Left
-    Tilt Up
-    Aux Video In
-    Station1 Video Out
-    Station1 Touch 01 In
-    Station1 Seat Input
-  Col4:
-    ArkNet Host Control In
-    Clock In
-    x
-    Station2 Video Out
-    Station2 Touch 01 In
-    Station2 Seat Input
-  Col5:
     Keypad Input X
     Keypad Input Y
-    x
-    x
-    Station2 Touch 02
-    Station1 Touch 02
 
-    ?Lateral Speed
-
-  Needs clock
-
-  Avionics Sensor Suite
+ArkNet Host Aircraft Control MC Inputs and Outputs
   Col1:
-    Compass
-    Tilt Left
-    Tilt Up
-    Tilt Forward
-  Col2
-    Flight Control In
-    GPS y
-    GPS X
-    Speed Forward
-  Col3
-    Speed (ABS)
-    Speed Ground
-    Speed vertical
-    Altitude
+    GPS X :9
+    GPS Y :10
+    Alt Left :11
+    Forward Speed :16
+    Station 1 Seat Input :1-4
+  Col2:
+    Clock In :24
+    --Alt Rear :14
+    TiltUp: 20
+    Compass :15
+    Alt Forwad :13
+    Station 2 Seat Input :5-8
+  Col3:  
+    ArkNet DataLoop P1 Input :25-32
+    Aux Video In
+    Alt Right :12
+    x
+    Station1 Touch 01 In
+  Col4:
+    ArkNet DataLoop Root Out
+    XPDR Radio Out
+    Station2 Video Out
+    Station1 Video Out
+    Station2 Touch 01 In
+  Col5:
+    Elevator Pitch :Out01
+    Aileron Primary :Out02
+    Rudder Yaw  :Out03
+    Canard Pitch :Out04
+    Aileron Brake :Out05
+
+
+ArkNet Host Aircraft Control luaMain Composite Inputs
+  Station 1 Seat Input :1-4
+  Station 2 Seat Input :5-8
+  GPS X :9
+  GPS Y :10
+  Alt Left :11
+  Alt Right :12
+  Alt Forwad :13
+  Alt Rear :14
+  Compass :15
+  Forward Speed :16
+  Station 1 Seat look :17-18
+  Station 1 hotkey bitflags: 19
+  TiltUp :20
+  Clock In :24
+  MC Tick :25
+  ArkNet DataLoop P1 Input :25-32
+  
+  Station1 Touch 01 In?
+  
+    
+
+ArkNet Host Aircraft Control luaMain Composite Outputs
+01  Aileron Primary :Out01 a/d axis1
+    Elevator Pitch :Out02 w/s axis2
+    Rudder Yaw  :Out03 l/r axis 3
+    Canard Pitch :Out04 w/s axis2
+    Aileron Brake :Out05  a/d axis1
+
+    ArkNet DataLoop Root Out
+    XPDR Radio Out
+
 
 
 Composite Inputs
@@ -119,105 +134,40 @@ function main()
 
   local I, O, Ib, Ob -- composite input/output tables
     , tickCounter
-    , screenCount, screensRendered, uiState, isCalibrating, touchDevices
+    , vAltHold, vAltHoldOn
+    , screenCount, screensRendered
+    , uiState
+    , seat1, seat2, gpsX, gpsY
+    , altL, altR, altF, altB, tiltUp
+    , compass, forwardSpeed, lookX, lookY, hotKeys
+    , clock, vehicleTick
     , lastTriggerClick
-    , playerLookX, playerLookY, lookTrigger, triggerClick
+    , pilotLookX, pilotLookY, lookTrigger, triggerClick
+    , sAlt, sPitch, sRoll
+    , sasPitch, sasRoll
     = {},{},{},{}
     , 0 -- tickCounter
-    , 0, 0, {}, true, {}
-    , {}
-
-  local verticalCalibration = {
-    seatPosition = {0,0,0}
-    , cameraPivot1 = {0,0,0}
-    , cameraOffset1 = {0,0,0}
-    , samples = {
-      definition = {
-        deviceID = -1
-        , touchX = -1
-        , touchY = -1
-        , touchLookX = empty
-        , touchLookY = empty
-        , touchTick = -1
-      }
-    }
-  }
-
-  local function calibration_addSample(deviceID, touchX, touchY, touchLookX, touchLookY, touchTick)
+    , 100, false -- vAltHold
+    , -1, -1, {}
     
-  end
+  local controlPitch, canardPitch, controlRoll, controlYaw
 
-  local function compareSamples(sample1, sample2)
-    if sample1.deviceID==sample2.deviceID then
-      -- ok, valid to compare pixel distance only
-
-      -- assuming: 
-      -- CalibrationWall is in front of the viewer, and is perfectly vertical in our reference frame
-      -- ViewHorizon is the horizontal plane at cameraLookY=0, also perpendicular to CalibrationWall
-      -- p1 and p2 form a vertical line on CalibrationWall, so we will ignore lookX angle and x coordinates
-      -- imagine p2 is above p1 (but it doesn't have to be)      
-      -- p0 is the point below p1-p2 on CalibrationWall that intersects with ViewHorizon
-      -- kd is the known vertical distance p2Y - p1Y
-
-      -- cameraFP is unknown camera focal point somewhere on the viewHorizon plane, but an uknown distance away from p1 and p2
-      -- there is a right triangle T1 from cameraFP along ViewHorizon to p0, with a right angle up CalibrationWall to p1
-      -- daH1 is the distance above horizon from p0 to p1
-      -- there is a right triangle T2 from cameraFP along ViewHorizon to p0, with a right angle up CalibrationWall to p2
-      -- daH2 is the distance above horizon from p0 to p2
-
-      -- p1LookY = a1 = the angle between cameraFP--P0 horizontal line and P1
-      -- p2LookY = a2 = the angle between cameraFP--P0 horizontal line and P2
-      -- dCamP0 is the distance from cameraFP to p0, the shared side of both triangles, adjacent to the look angle
-
-      -- tan(a1) = opposite/adjacent = daH2 / dCamP0
-      -- tan(a2) = opposite/adjacent = daH1 / dCamP0
-      -- daH1 = daH2 - kd (known distance from p2Y-p1Y)
-      -- the ratio tan(p2LookY)/tan(p1LookY) = daH2/daH1
-      -- so also:  tan(p2LookY)/tan(p1LookY) = daH2/(daH2-kd)
-      -- so also:  tan(p1LookY)/tan(p2LookY) = (daH2-kd) / daH2
-      --                                     = daH2/daH2 - kd/daH2
-      --     daH2 * tan(a1)/tan(a2) = 1 - kd
-      --     daH2 * tan(a1) = tan(a2) - (kd * tan(a2))
-      -- daH2 * tan(a1) / tan(a2) = daH2 - kd
-
-
-      -- wait, how did I get this?
-      -- daH2 = (tan(a2)*kd) / (tan(a2)-tan(a1))
-
-      --[[
-
-        name="Monitor 3x3"
-        monitor_border="0.022" monitor_inset="0.012"
-
-        name="HUD Large"
-        monitor_border="0.02" monitor_inset="0.01"
-      ]]
-      
-      wallDistance is the unkown Z distance from cameraXY along the horizon line to the CalibrationWall
-      --
-      
-      -- pointint up in  line is on a vertical 
-      -- there is a line containing p1 and p2, and we know the distance between these two points
-      
-      -- given a plane that includes eye level, p1, p2
-      -- p1 dist
-      local 
-
-    end
-  end
-    
+  -- forward function declarations    
   local createTouchInput, updateTouchInput, checkTouchStart
 
   local function init()
-    -- input channels(touch1On, touch2On, width, height, touch1X, touch1Y, touch2X, touch2Y,deviceID)
-    touchDevices[1] = createTouchInput(1,9,10,11,12,13,14,15,16)
-    touchDevices[2] = createTouchInput(3,25,26,23,24,25,26,27,28)
-    touchDevices[3] = createTouchInput(2,17,18,17,18,19,20,21,22)
+    --touchDevices[1] = createTouchInput(1,9,10,11,12,13,14,15,16)
+    --touchDevices[2] = createTouchInput(3,25,26,23,24,25,26,27,28)
   end
 
-  --[[ uiState:
-    { lastDeviceTouched, lastCornerTouched}
-  ]]
+  local function getFlags(flags, result, _bit)
+    result = result or {}
+    for i=1,8 do
+      _bit = 2^(i-1)
+      result[i] = flags % (_bit*2) >= _bit
+    end
+    return result
+  end
 
   function onTick()  
     screenCount = screensRendered
@@ -228,50 +178,74 @@ function main()
       O[i]=I[i];Ob[i]=Ib[i]
     end
 
-    playerLookX, playerLookY = getTableValues(I, {9,10})
-    lookTrigger, triggerClick = Ib[31], lookTrigger
+    seat1, seat2
+      , gpsX, gpsY, altL, altR, altF, altB -- I[9] ... I[14]
+      , compass, forwardSpeed, pilotLookX, pilotLookY, hotKeys -- I[15]...I[19]
+      , tiltUp, _, _, _ -- 20-23
+      , clock, vehicleTick
+      = {unpack(I,1,4)}
+      , {unpack(I,5,8)}
+      , unpack(I,9,25)
+
+    hotKeys = getFlags(hotKeys)    
+    --playerLookX, playerLookY = getTableValues(I, {9,10})
+    lookTrigger, triggerClick = hotKeys[7], lookTrigger
     triggerClick = lookTrigger and not triggerClick
     if triggerClick then
-      lastTriggerClick = {playerLookX, playerLookY}
-    end
-    for i, touchDevice in ipairz(touchDevices) do
-      local events, state, config, calibration
-        = updateTouchInput(touchDevice)
-      
-      local deviceID, pixWidth, pixHeight, meterWidth, meterHeight, corners 
-        = unpack(calibration)
-      
-      for j, corner in ipairz(corners or {}) do
-        local cornerId, cornerX, cornerY, avgLookX, avgLookY, samples
-          = unpack(corner)
-          
-        local touchResult = {}
-        if checkTouchStart(touchDevice, cornerX, cornerY, 2, 2, touchResult) then          
-          uiState[1], uiState[2], avgLookX, avgLookY
-            = i, j, 0, 0
-
-          --[[ event format: {touchIsPressed, touchWasPressed, touchX, touchY, touchTick, touchLookX, touchLookY, lastPressEvent{}, lastReleaseEvent{} } ]]
-          local touchX, touchY, _, touchLookX, touchLookY
-            = unpack(touchResult, 3)
-          if #samples>5 then
-            table.remove(samples, 1)
-          end
-          samples[#samples+1] = {touchX, touchY, touchLookX, touchLookY}
-          for _, sample in ipairz(samples) do
-            avgLookX, avgLookY
-              = avgLookX + sample[3] / #samples
-              , avgLookY + sample[4] / #samples
-          end
-          corner[4],corner[5] = avgLookX, avgLookY
-        end
-      end
+      lastTriggerClick = {pilotLookX, pilotLookY}
     end
 
-    for i=1,32 do -- load composite input array and copy to output array for pass-through
-      I[i]=getNumber(i);Ib[i]=getBool(i)
-      O[i]=I[i];Ob[i]=Ib[i]
+    sAlt = (altL+altR)/2
+    sPitch = math.asin((altF-sAlt)*2)/pi/2
+    sRoll = math.asin((altL-sAlt)*2 / cos(sPitch))/pi/2
+
+    --[[    
+    Aileron Primary :Out01 a/d axis1
+    Elevator Pitch :Out02 w/s axis2
+    Rudder Yaw  :Out03 l/r axis 3
+    Canard Pitch :Out04 w/s axis2
+    Aileron Brake :Out05  a/d axis1
+    ]]
+    mouseControl = hotKeys[1] and 1 or 0
+    controlRoll = seat1[1] + seat2[1] 
+    controlPitch = seat1[2] + seat2[2]
+      - clamp(mouseControl * pilotLookY * abs(pilotLookY) * 32, -.5, .5)
+    controlYaw = seat1[3] + seat2[3]
+      + clamp(mouseControl * pilotLookX * abs(pilotLookX) * 32, -.5, .5)
+
+    sasPitch = (abs(controlPitch)>0.1 and mouseControl>0) and 0
+      or (max(min(sPitch * 16, .5),-.5))
+    sasRoll = (abs(controlRoll)>0.1) and 0
+      or (max(min(sRoll * 16, .5),-.5))*-1
+
+    vAltHoldOn = hotKeys[3]
+
+    if abs(controlPitch)>0.1 and abs(sPitch)<0.1 and vAltHoldOn then
+      vAltHold = sAlt
     end
 
+    if vAltHoldOn then
+      sasPitch = sasPitch + clamp( (sAlt - vAltHold) / 100, -1, 0.1)
+    end
+
+    if tiltUp < 0 then
+      sPitch=-sPitch
+      sRoll = pi - sRoll
+      --sasPitch = -sasPitch
+    end
+    controlPitch = controlPitch + sasPitch
+    controlRoll = controlRoll + sasRoll
+    canardPitch = controlPitch
+
+    --plop(false, O, {controlRoll, controlPitch, controlYaw, canardPitch, controlRoll})
+    for i,v in ipairz({controlRoll, controlPitch, controlYaw, canardPitch, controlRoll}) do
+      O[i]=v
+    end
+    
+    for i=1,32 do
+      setNumber(i, O[i])
+      setBool(i, Ob[i])
+    end
     screensRendered = 0
   end
 
@@ -312,76 +286,28 @@ function main()
       betterSetAlpha(1)
       betterSetColor(cBlue)
       textPosX, textPosY = 2, 4
-      printText(format("Screen %i/%i" ,screensRendered, screenCount))
+      --printText(format("Screen %i/%i" ,screensRendered, screenCount))
       betterSetColor(lookTrigger and cGreen or cWhite)
-      printText(format("%.2f,%.2f", playerLookX*360, playerLookY*360))
+      printText(format("%.2f,%.2f", pilotLookX*360, pilotLookY*360))
+      printText(format("Pit: %.2f", sPitch * 360))
+      printText(format("Rol: %.2f", sRoll * 360))
+      printText(format("Alt: %.2f", sAlt))
+      betterSetColor(vAltHoldOn and cGreen or cWhite)
+      printText(format("AHold: %.2f", vAltHold))
+      printText(format("P: %.2f=%.2f+%.2f", controlPitch, controlPitch - sasPitch, sasPitch)) 
+      
       
       if lastTriggerClick and lastTriggerClick[1] then
         printText( format("%.2f,%.2f", lastTriggerClick[1]*360, lastTriggerClick[2]*360))
       end
-
-      do
-        local touchDevice = touchDevices[screensRendered]
-        local events, states, inputConfig, calibration = unpack(touchDevice or {})
-        local deviceID, pixWidth, pixHeight, meterWidth, meterHeight, corners
-        = unpack(calibration or {})      
-
-        local lastDeviceTouched, lastCornerTouched = unpack(uiState)
-
-        if pixWidth~=screenWidth or pixHeight~=screenHeight then
-          --p rint("device not initialized")
-        else
-          for i, coord in ipairz({events[1], events[2]}) do
-            local touchIsPressed, touchWasPressed, touchX, touchY
-              , touchTick, touchLookX, touchLookY
-              = unpack(coord)
-            if touchX then
-              drawCursor(touchX, touchY, touchIsPressed)
-            end
-          end
-
-          for i,corner in ipairz(corners) do
-            local textWidth, cornerId, cornerX, cornerY, avgLookX, avgLookY, samples
-              = 5 * 5 + 2
-              , unpack(corner)
-
-            if screensRendered==lastDeviceTouched and lastCornerTouched==i then
-              printText(format("corner: %i,%i", cornerId[1], cornerId[2]))              
-              printText(format("lookX: %.4f", avgLookX*360))
-              printText(format("lookY: %.4f", avgLookY*360))
-              betterSetAlpha(.5)
-              betterDrawRect(cornerX-.5,cornerY-2.5,2,6, cGreen)    
-              betterDrawRect(cornerX-2.5,cornerY-.5,6,2, cGreen)
-            end            
-            
-            if #samples>0 then            
-              betterSetAlpha(min(#samples/4,1))
-              betterDrawRect(cornerX-1.5,cornerY-1.5,4,4, cWhite)
-            end
-            betterSetAlpha(1)
-            betterDrawRect(cornerX-.5,cornerY-.5,1,1, cRed)
-            betterDrawRect(cornerX+.5,cornerY-.5,1,1, cGreen)
-            betterDrawRect(cornerX-.5,cornerY+.5,1,1, cBlue)
-            betterDrawRect(cornerX+.5,cornerY+.5,1,1, cMagenta)
-
-            --[[
-            betterDrawRect(
-              cornerX-.5 - (cornerId[1]+1) * textWidth / 2              
-              , cornerY-.5 + ( (max(2,cornerId[2]+2)-2.5) * -5.5*2 - 3.5)
-              , textWidth, 7, cBlue)
-            betterSetColor(cWhite)
-            drawTextBox(
-              cornerX-.5 - (cornerId[1]+1) * textWidth / 2              
-              , cornerY-.5 + ( (max(2,cornerId[2]+2)-2.5) * -5.5*2 - 3.5)
-              , textWidth, 7
-              , format("%i,%i", cornerId[1], cornerId[2])
-              )
-            ]]
-          end
-          
-          
-        end
+      --[[
+      printText("keyFlags: " .. tostring(I[19]))
+      local toggles = "keys: "
+      for i=1,8 do
+        toggles=toggles .. (hotKeys[i] and "X" or "O")
       end
+      printText(toggles)
+      ]]
 
     end
     --[[ End onDraw]]
@@ -438,138 +364,6 @@ function main()
         drawRect(x,y,w-1,h-1)
       end
     end
-
-  end
-
-
-  -- input channels(touch1On, touch2On, width, height, touch1X, touch1Y, touch2X, touch2Y)
-  function createTouchInput(deviceID, ...)
-    local newDevice = { --events, states, inputConfig, calibration
-      {{},{}} -- events
-      , {{},{},{},{}} -- states{T01,T02,Combo,raw,previous}      
-      -- inputConfig: {touch1On, touch2On, width, height, touch1X, touch1Y, touch2X, touch2Y, }
-      , {...} --inputConfig
-      -- calibration
-      , {deviceID}
-    }
-    return newDevice
-  end
-
-  -- forward function declarations:
-  local initCalibration
-
-  function checkTouchStart(touchDevice, left, top, width, height, result)
-    local events, state, config, calibration = unpack(touchDevice)
-
-    --[[ touchEvent format
-      {touchIsPressed, touchWasPressed, touchX, touchY, touchTick, touchLookX, touchLookY,
-          , lastPressEvent{} 
-          , lastReleaseEvent{} }
-    ]]
-    for i, coord in ipairz({events[1], events[2]}) do    
-      local touchIsPressed, touchWasPressed, touchX, touchY = unpack(coord)
-      if touchIsPressed and not touchWasPressed then
-        -- this is new press this tick
-        if touchX>=left-0.5 and touchX<left+width-0.5
-          and touchY>=top-0.5 and touchY<top+height-0.5 then
-          -- this event is inside the hitbox. Return full copy of lastPressEvent
-          return plop(false, result, coord[8])
-
-        end
-      end
-    end
-  end
-
-  function updateTouchInput(touchDevice)
-    local events, state, config, calibration = unpack(touchDevice)
-
-    local touchState = {getTableValues(I, config)}
-    touchState[1] = Ib[config[1]]
-    touchState[2] = Ib[config[2]]
-
-    local touch1On, touch2On, width, height, touch1X, touch1Y, touch2X, touch2Y
-      --, touch1, touch2 
-      = unpack(touchState)
-    --state[5] = state[4] or touchState
-    --state[4] = touchState
-
-    
-    initCalibration(calibration, width, height)
-
-    for i, updateState in ipairz(
-        { {touch1On, touch1X, touch1Y}
-        , {touch2On, touch2X, touch2Y}
-        }
-      ) do
-      local event, newOn, newX, newY, oldOn
-        , lastPressEvent, lastReleaseEvent, newState
-        = events[i], unpack(updateState)
-
-      oldOn, lastPressEvent, lastReleaseEvent
-        = event[1], event[8] or {}, event[9] or {}
-      if newOn==oldOn then
-        -- update old on, but nothing else changes
-        event[2]=oldOn
-      else
-        -- there is a press state change
-        newState = 
-          {newOn, oldOn, newX, newY, tickCounter, playerLookX, playerLookY
-          , {unpack(lastPressEvent,1,7)} 
-          -- Truncate lastEvent[lastEvent] to prevent recursive history memory leak
-          , {unpack(lastReleaseEvent,1,7)} }
-        events[i] = newState
-        if newOn then
-          -- save a copy of event state as lastPressEvent
-          newState[8] = {unpack(newState)}
-        else
-          -- save a copy of event state as lastReleaseEvent
-          newState[9] = {unpack(newState)}
-        end
-      end
-    end
-
-    return events, state, config, calibration
-  end
-
-  function initCalibration(calibration, deviceWidth, deviceHeight)
-    --local events, state, config, calibration = unpack(touchDevice)
-
-    local deviceID, pixWidth, pixHeight, meterWidth, meterHeight, corners = unpack(calibration)
-    if deviceWidth==0 or (deviceWidth%32)~=0 -- invalid screen width values
-      or deviceHeight==0 or (deviceHeight%32)~=0 -- invalid screen height values
-      or deviceWidth==pixWidth -- already initialized for this width
-      or deviceHeight==pixHeight -- already initialized for this height
-      then return -- nothing to do here
-    end
-
-    pixWidth, pixHeight, meterWidth, meterHeight 
-      = deviceWidth, deviceHeight
-        , deviceWidth/32, deviceWidth/32
-    corners = {} --[[
-      { {-1,-1},0.5,pixWidth*0+1-0.5,false,false,{}}
-      , {-1,0},0.5,pixWidth*0.5+0-0.5,false,false,{}}
-      , {-1,1},0.5,pixWidth*1-1-0.5,false,false,{}}
-      , etc
-    ]]
-    for y = -1,1 do
-      for x = -1,1 do
-        -- if deviceWidth = 32 then corners at 
-        -- 0,1     - 15,16    - 30,31
-        -- 0.5     - 15.5     - 30.5
-        -- 0+1-0.5 - 16+0-0.5 - 32-1-0.5 
-
-        corners[x+5 + y*3] = 
-        -- {cornerId{}, cornerX, cornerY, avgLookX, avgLookX, samples{} }
-        {
-          {x,y}
-          , deviceWidth * (x+1)/2 - x - 0.5
-          , deviceHeight * (y+1)/2 - y - 0.5
-          , false, false, {}
-        }
-      end
-    end
-
-    plop(false,calibration,{deviceID, pixWidth, pixHeight, meterWidth, meterHeight, corners})
 
   end
 
